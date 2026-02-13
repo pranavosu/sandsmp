@@ -22,6 +22,59 @@ const ELEMENTS = [
 
 const BRUSH_SIZES = [0, 1, 2, 4, 6, 10] as const;
 
+/** Refs bundle passed to the frame loop to avoid per-ref closures. */
+interface SimRefs {
+  universe: React.RefObject<SimulationUniverse | null>;
+  renderer: React.RefObject<Renderer | null>;
+  input: React.RefObject<InputHandler | null>;
+  memory: React.RefObject<WebAssembly.Memory | null>;
+  paused: React.RefObject<boolean>;
+  raf: React.RefObject<number>;
+  fpsFrames: React.RefObject<number>;
+  fpsLastTime: React.RefObject<number>;
+  setFps: (fps: number) => void;
+}
+
+/** Module-level frame loop — no hooks, no self-reference issues. */
+function runFrame(refs: SimRefs) {
+  const universe = refs.universe.current;
+  const renderer = refs.renderer.current;
+  const input = refs.input.current;
+  const memory = refs.memory.current;
+  if (!universe || !renderer || !input || !memory) return;
+
+  const commands = input.flush();
+  for (const cmd of commands) {
+    if (cmd.species === GHOST_SPECIES) {
+      const group = universe.alloc_ghost_group();
+      const stampCmds = ghostStamp(cmd.x, cmd.y, GHOST_SPECIES, GRID_WIDTH, GRID_HEIGHT);
+      for (const sc of stampCmds) {
+        universe.set_ghost(sc.x, sc.y, group);
+      }
+    } else {
+      universe.set_cell(cmd.x, cmd.y, cmd.species);
+    }
+  }
+
+  if (!refs.paused.current) {
+    universe.tick();
+  }
+
+  const ptr = universe.species_ptr();
+  const speciesData = new Uint8Array(memory.buffer, ptr, GRID_WIDTH * GRID_HEIGHT);
+  renderer.render(speciesData);
+
+  refs.fpsFrames.current!++;
+  const now = performance.now();
+  if (now - refs.fpsLastTime.current! >= 1000) {
+    refs.setFps(refs.fpsFrames.current!);
+    refs.fpsFrames.current = 0;
+    refs.fpsLastTime.current = now;
+  }
+
+  refs.raf.current = requestAnimationFrame(() => runFrame(refs));
+}
+
 export default function SimulationCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [status, setStatus] = useState<Status>('loading');
@@ -38,29 +91,25 @@ export default function SimulationCanvas() {
   const memoryRef = useRef<WebAssembly.Memory | null>(null);
   const pausedRef = useRef(false);
   const fpsFrames = useRef(0);
-  const fpsLastTime = useRef(performance.now());
+  const fpsLastTime = useRef(0);
+
+  // Stable refs bundle for the module-level frame loop.
+  const simRefs = useRef<SimRefs>({
+    universe: universeRef,
+    renderer: rendererRef,
+    input: inputRef,
+    memory: memoryRef,
+    paused: pausedRef,
+    raf: rafRef,
+    fpsFrames,
+    fpsLastTime,
+    setFps,
+  });
 
   useEffect(() => { pausedRef.current = paused; }, [paused]);
   useEffect(() => { inputRef.current?.setSpecies(selectedSpecies); }, [selectedSpecies]);
   useEffect(() => { inputRef.current?.setBrushRadius(brushRadius); }, [brushRadius]);
   useEffect(() => { inputRef.current?.setStampMode(selectedSpecies === GHOST_SPECIES); }, [selectedSpecies]);
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement) return;
-      const key = e.key.toUpperCase();
-      for (const el of ELEMENTS) {
-        if (el.shortcut === key) { setSelectedSpecies(el.species); return; }
-      }
-      if (key === ' ') { e.preventDefault(); setPaused(p => !p); }
-      if (key === 'R') { handleReset(); }
-      if (e.key === '[') setBrushRadius(r => Math.max(0, r - 1));
-      if (e.key === ']') setBrushRadius(r => Math.min(10, r + 1));
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, []);
 
   const handleReset = useCallback(() => {
     const universe = universeRef.current;
@@ -77,56 +126,26 @@ export default function SimulationCanvas() {
       universeRef.current = newUniverse;
       memoryRef.current = wasm.memory;
       // Restart the frame loop
-      rafRef.current = requestAnimationFrame(() => frameLoopRef.current?.());
+      rafRef.current = requestAnimationFrame(() => runFrame(simRefs.current));
     });
   }, []);
 
-  const frameLoopRef = useRef<(() => void) | null>(null);
-
+  // Keyboard shortcuts
   useEffect(() => {
-    frameLoopRef.current = () => {
-      const universe = universeRef.current;
-      const renderer = rendererRef.current;
-      const input = inputRef.current;
-      const memory = memoryRef.current;
-      if (!universe || !renderer || !input || !memory) return;
-
-      const commands = input.flush();
-      for (const cmd of commands) {
-        if (cmd.species === GHOST_SPECIES) {
-          // Each ghost stamp gets its own group so they move independently.
-          const group = universe.alloc_ghost_group();
-          const stampCmds = ghostStamp(cmd.x, cmd.y, GHOST_SPECIES, GRID_WIDTH, GRID_HEIGHT);
-          for (const sc of stampCmds) {
-            universe.set_ghost(sc.x, sc.y, group);
-          }
-        } else {
-          universe.set_cell(cmd.x, cmd.y, cmd.species);
-        }
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement) return;
+      const key = e.key.toUpperCase();
+      for (const el of ELEMENTS) {
+        if (el.shortcut === key) { setSelectedSpecies(el.species); return; }
       }
-
-      if (!pausedRef.current) {
-        universe.tick();
-      }
-
-      // Re-read memory.buffer AFTER tick() — WASM memory growth
-      // detaches the old ArrayBuffer, so we must never cache it.
-      const ptr = universe.species_ptr();
-      const speciesData = new Uint8Array(memory.buffer, ptr, GRID_WIDTH * GRID_HEIGHT);
-      renderer.render(speciesData);
-
-      // FPS counter
-      fpsFrames.current++;
-      const now = performance.now();
-      if (now - fpsLastTime.current >= 1000) {
-        setFps(fpsFrames.current);
-        fpsFrames.current = 0;
-        fpsLastTime.current = now;
-      }
-
-      rafRef.current = requestAnimationFrame(() => frameLoopRef.current?.());
+      if (key === ' ') { e.preventDefault(); setPaused(p => !p); }
+      if (key === 'R') { handleReset(); }
+      if (e.key === '[') setBrushRadius(r => Math.max(0, r - 1));
+      if (e.key === ']') setBrushRadius(r => Math.min(10, r + 1));
     };
-  });
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [handleReset]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -155,7 +174,7 @@ export default function SimulationCanvas() {
         inputRef.current = input;
 
         setStatus('running');
-        rafRef.current = requestAnimationFrame(() => frameLoopRef.current?.());
+        rafRef.current = requestAnimationFrame(() => runFrame(simRefs.current));
       } catch (err) {
         if (cancelled) return;
         setErrorMsg(`Init failed: ${err instanceof Error ? err.message : String(err)}`);

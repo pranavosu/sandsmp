@@ -27,8 +27,6 @@ const GHOST_BODY: readonly string[] = [
   '..*...*...*....',
 ];
 
-// Species value for the ghost's eyes (Empty = 0, so eyes are holes)
-const EYE_SPECIES = 0;
 
 /**
  * Generate draw commands to stamp a ghost centered at (cx, cy).
