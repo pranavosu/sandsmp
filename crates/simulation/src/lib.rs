@@ -2,6 +2,7 @@
 
 pub mod api;
 pub mod cell;
+pub mod elements;
 
 use cell::{Cell, Species};
 use wasm_bindgen::prelude::*;
