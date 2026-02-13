@@ -1,5 +1,10 @@
+//! Cell and Species types for the simulation grid.
+
+use std::fmt;
+
+/// Discriminant values map directly to the `r8uint` GPU texture — do not reorder.
 #[repr(u8)]
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Species {
     Empty = 0,
     Sand = 1,
@@ -8,8 +13,21 @@ pub enum Species {
     Fire = 4,
 }
 
+impl fmt::Display for Species {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Empty => write!(f, "Empty"),
+            Self::Sand => write!(f, "Sand"),
+            Self::Water => write!(f, "Water"),
+            Self::Wall => write!(f, "Wall"),
+            Self::Fire => write!(f, "Fire"),
+        }
+    }
+}
+
+/// 4-byte grid cell: `#[repr(C)]` for direct GPU memory mapping.
 #[repr(C)]
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct Cell {
     pub species: Species,
     pub ra: u8,
@@ -17,9 +35,22 @@ pub struct Cell {
     pub clock: u8,
 }
 
+impl Default for Cell {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
+
+impl fmt::Display for Cell {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.species)
+    }
+}
+
 impl Cell {
+    #[must_use]
     pub fn new(species: Species) -> Self {
-        Cell {
+        Self {
             species,
             ra: 0,
             rb: 0,
@@ -27,12 +58,14 @@ impl Cell {
         }
     }
 
+    #[must_use]
     pub fn empty() -> Self {
-        Cell::new(Species::Empty)
+        Self::new(Species::Empty)
     }
 
+    #[must_use]
     pub fn wall() -> Self {
-        Cell::new(Species::Wall)
+        Self::new(Species::Wall)
     }
 }
 
@@ -69,6 +102,17 @@ mod tests {
 
         let sand = Cell::new(Species::Sand);
         assert_eq!(sand.species, Species::Sand);
+    }
+
+    #[test]
+    fn cell_default_is_empty() {
+        assert_eq!(Cell::default(), Cell::empty());
+    }
+
+    #[test]
+    fn species_display() {
+        assert_eq!(format!("{}", Species::Sand), "Sand");
+        assert_eq!(format!("{}", Species::Empty), "Empty");
     }
 
     // Feature: single-player-simulation-mvp, Property 1: Grid initialization produces all-empty cells

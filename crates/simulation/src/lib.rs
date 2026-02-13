@@ -1,9 +1,13 @@
+//! Falling sand simulation engine.
+
 pub mod api;
 pub mod cell;
 
 use cell::{Cell, Species};
 use wasm_bindgen::prelude::*;
 
+/// 2D grid of cells. Out-of-bounds reads return Wall, writes are no-ops.
+#[derive(Debug)]
 pub struct Grid {
     pub width: usize,
     pub height: usize,
@@ -12,8 +16,9 @@ pub struct Grid {
 }
 
 impl Grid {
+    #[must_use]
     pub fn new(width: usize, height: usize) -> Self {
-        Grid {
+        Self {
             width,
             height,
             cells: vec![Cell::empty(); width * height],
@@ -21,10 +26,12 @@ impl Grid {
         }
     }
 
+    #[must_use]
     pub fn in_bounds(&self, x: i32, y: i32) -> bool {
         x >= 0 && (x as usize) < self.width && y >= 0 && (y as usize) < self.height
     }
 
+    #[must_use]
     pub fn get(&self, x: i32, y: i32) -> Cell {
         if self.in_bounds(x, y) {
             self.cells[y as usize * self.width + x as usize]
@@ -41,14 +48,15 @@ impl Grid {
 }
 
 #[wasm_bindgen]
+#[must_use]
 pub fn greet() -> String {
     "Hello from simulation!".into()
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cell::Species;
     use proptest::prelude::*;
 
     fn arb_species() -> impl Strategy<Value = Species> {
@@ -151,11 +159,9 @@ mod tests {
             let mut grid = Grid::new(256, 256);
             let before: Vec<Cell> = grid.cells.clone();
 
-            // get returns Wall
             let got = grid.get(x, y);
             prop_assert_eq!(got.species, Species::Wall);
 
-            // set is a no-op
             grid.set(x, y, cell);
             prop_assert_eq!(grid.cells, before);
         }
