@@ -3,8 +3,17 @@
 // bypassing the bundler entirely to avoid Turbopack .wasm resolution issues.
 
 export interface SimulationExports {
-  greet: () => string;
+  Universe: new (width: number, height: number) => SimulationUniverse;
   memory: WebAssembly.Memory;
+}
+
+export interface SimulationUniverse {
+  tick(): void;
+  set_cell(x: number, y: number, species: number): void;
+  species_ptr(): number;
+  width(): number;
+  height(): number;
+  free(): void;
 }
 
 let wasmInstance: SimulationExports | null = null;
@@ -23,7 +32,7 @@ export async function loadSimulation(): Promise<SimulationExports> {
   await init('/simulation_bg.wasm');
 
   wasmInstance = {
-    greet: mod.greet as () => string,
+    Universe: mod.Universe as new (width: number, height: number) => SimulationUniverse,
     memory: (mod as Record<string, unknown>).memory as WebAssembly.Memory,
   };
 

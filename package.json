@@ -3,8 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "npm run build:wasm && next dev",
+    "build:wasm": "wasm-pack build --target web crates/simulation && cp crates/simulation/pkg/simulation_bg.wasm public/simulation_bg.wasm && cp crates/simulation/pkg/simulation.js public/simulation.js",
+    "build": "npm run build:wasm && next build",
     "start": "next start",
     "lint": "eslint"
   },

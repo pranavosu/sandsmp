@@ -8,7 +8,11 @@ export default function WasmTest() {
 
   useEffect(() => {
     loadSimulation()
-      .then((wasm) => setMessage(wasm.greet()))
+      .then((wasm) => {
+        const u = new wasm.Universe(4, 4);
+        setMessage(`WASM loaded: Universe ${u.width()}x${u.height()}`);
+        u.free();
+      })
       .catch((err) => setMessage(`WASM load failed: ${err}`));
   }, []);
 
