@@ -5,6 +5,7 @@ pub mod cell;
 pub mod elements;
 
 use cell::{Cell, Species};
+use std::fmt;
 use wasm_bindgen::prelude::*;
 
 /// 2D grid of cells. Out-of-bounds reads return Wall, writes are no-ops.
@@ -58,7 +59,7 @@ impl Grid {
         let h = self.height as i32;
 
         for y in (0..h).rev() {
-            let x_range: Box<dyn Iterator<Item = i32>> = if gen % 2 == 0 {
+            let x_range: Box<dyn Iterator<Item = i32>> = if gen.is_multiple_of(2) {
                 Box::new(0..w)
             } else {
                 Box::new((0..w).rev())
@@ -79,10 +80,92 @@ impl Grid {
     }
 }
 
+/// WASM-exported wrapper around [`Grid`] for browser consumption.
+///
+/// Maintains a separate species-only byte buffer (`species_buffer`) that is
+/// synced after each `tick()`, suitable for direct GPU texture upload.
 #[wasm_bindgen]
-#[must_use]
-pub fn greet() -> String {
-    "Hello from simulation!".into()
+pub struct Universe {
+    grid: Grid,
+    /// One byte per cell (species only), length = width × height.
+    species_buffer: Vec<u8>,
+}
+
+impl fmt::Debug for Universe {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Universe")
+            .field("grid", &self.grid)
+            .field("species_buffer_len", &self.species_buffer.len())
+            .finish()
+    }
+}
+
+#[wasm_bindgen]
+impl Universe {
+    /// Create a new universe with the given dimensions, all cells empty.
+    #[wasm_bindgen(constructor)]
+    #[must_use]
+    pub fn new(width: usize, height: usize) -> Self {
+        let grid = Grid::new(width, height);
+        let species_buffer = vec![Species::Empty as u8; width * height];
+        Self {
+            grid,
+            species_buffer,
+        }
+    }
+
+    /// Advance the simulation by one tick and sync the species buffer.
+    pub fn tick(&mut self) {
+        self.grid.tick();
+        self.sync_species_buffer();
+    }
+
+    /// Paint a cell at `(x, y)` with the given species value.
+    ///
+    /// Out-of-bounds coordinates are silently ignored.
+    pub fn set_cell(&mut self, x: usize, y: usize, species: u8) {
+        if x >= self.grid.width || y >= self.grid.height {
+            return;
+        }
+        let s = match species {
+            0 => Species::Empty,
+            1 => Species::Sand,
+            2 => Species::Water,
+            3 => Species::Wall,
+            4 => Species::Fire,
+            _ => return, // unknown species — ignore
+        };
+        let mut cell = Cell::new(s);
+        // Fire starts with a lifetime counter so it doesn't vanish instantly.
+        if s == Species::Fire {
+            cell.rb = 120;
+        }
+        self.grid.set(x as i32, y as i32, cell);
+    }
+
+    /// Pointer to the species-only byte buffer for GPU texture upload.
+    #[must_use]
+    pub fn species_ptr(&self) -> *const u8 {
+        self.species_buffer.as_ptr()
+    }
+
+    #[must_use]
+    pub fn width(&self) -> usize {
+        self.grid.width
+    }
+
+    #[must_use]
+    pub fn height(&self) -> usize {
+        self.grid.height
+    }
+}
+
+impl Universe {
+    fn sync_species_buffer(&mut self) {
+        for (i, cell) in self.grid.cells.iter().enumerate() {
+            self.species_buffer[i] = cell.species as u8;
+        }
+    }
 }
 
 
@@ -235,6 +318,62 @@ mod tests {
             // current generation, so the tick loop skipped it.
             prop_assert_eq!(grid.get(x, y).species, Species::Sand);
             prop_assert_eq!(grid.get(x, y + 1).species, Species::Empty);
+        }
+    }
+
+    // Feature: single-player-simulation-mvp, Property 14: Species buffer matches grid state
+    // **Validates: Requirements 6.5**
+    proptest! {
+        #[test]
+        fn prop_species_buffer_matches_grid_state(
+            placements in proptest::collection::vec(
+                (0usize..256, 0usize..256, 0u8..5),
+                0..50,
+            ),
+            ticks in 1u32..10,
+        ) {
+            let mut universe = Universe::new(256, 256);
+
+            // Paint arbitrary cells.
+            for &(x, y, species) in &placements {
+                universe.set_cell(x, y, species);
+            }
+
+            // Run ticks — sync_species_buffer is called at the end of each tick().
+            for _ in 0..ticks {
+                universe.tick();
+            }
+
+            // After tick(), the species buffer must match the grid.
+            let buf = &universe.species_buffer;
+            let cells = &universe.grid.cells;
+            prop_assert_eq!(buf.len(), cells.len());
+            for i in 0..cells.len() {
+                prop_assert_eq!(
+                    buf[i],
+                    cells[i].species as u8,
+                    "mismatch at index {}: buffer={}, cell={}",
+                    i, buf[i], cells[i].species as u8,
+                );
+            }
+        }
+    }
+
+    // Feature: single-player-simulation-mvp, Property 15: Out-of-bounds set_cell is a no-op
+    // **Validates: Requirements 6.6**
+    proptest! {
+        #[test]
+        fn prop_out_of_bounds_set_cell_is_noop(
+            x in 256usize..1024,
+            y in 256usize..1024,
+            species in 0u8..5,
+        ) {
+            let mut universe = Universe::new(256, 256);
+            let cells_before: Vec<Cell> = universe.grid.cells.clone();
+
+            universe.set_cell(x, y, species);
+
+            prop_assert_eq!(universe.grid.cells, cells_before);
         }
     }
 }

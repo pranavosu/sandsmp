@@ -19,11 +19,6 @@ pub fn update_cell(species: Species, api: &mut SandApi) {
     }
 }
 
-/// Simulate a single tick on the grid by scanning bottom-to-top and calling
-/// element update functions. This is a test helper until `Grid::tick()` is
-/// implemented in task 7.
-#[cfg(test)]
-/// Simulate a single tick on the grid. Delegates to `Grid::tick()`.
 #[cfg(test)]
 pub(crate) fn simulate_tick(grid: &mut crate::Grid) {
     grid.tick();

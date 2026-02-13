@@ -2,6 +2,9 @@
 name = "simulation"
 version = "0.1.0"
 edition = "2021"
+description = "Falling sand simulation engine compiled to WASM"
+repository = "https://github.com/pranavosu/sandsmp"
+license = "MIT"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
