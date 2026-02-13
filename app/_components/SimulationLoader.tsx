@@ -2,11 +2,11 @@
 
 import dynamic from 'next/dynamic';
 
-const WasmTest = dynamic(() => import('./WasmTest'), {
+const SimulationCanvas = dynamic(() => import('./SimulationCanvas'), {
   ssr: false,
-  loading: () => <p>Loading simulation...</p>,
+  loading: () => <p>Loading simulation…</p>,
 });
 
 export default function SimulationLoader() {
-  return <WasmTest />;
+  return <SimulationCanvas />;
 }

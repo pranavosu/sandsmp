@@ -1,10 +1,18 @@
-// Runtime loader for the simulation WASM module.
-// Loads the wasm-pack generated JS glue and .wasm from public/ at runtime,
-// bypassing the bundler entirely to avoid Turbopack .wasm resolution issues.
+// Loads wasm-pack generated JS glue + .wasm from public/ at runtime,
+// bypassing the bundler to avoid Turbopack .wasm resolution issues.
 
 export interface SimulationExports {
-  greet: () => string;
+  Universe: new (width: number, height: number) => SimulationUniverse;
   memory: WebAssembly.Memory;
+}
+
+export interface SimulationUniverse {
+  tick(): void;
+  set_cell(x: number, y: number, species: number): void;
+  species_ptr(): number;
+  width(): number;
+  height(): number;
+  free(): void;
 }
 
 let wasmInstance: SimulationExports | null = null;
@@ -12,8 +20,7 @@ let wasmInstance: SimulationExports | null = null;
 export async function loadSimulation(): Promise<SimulationExports> {
   if (wasmInstance) return wasmInstance;
 
-  // Use Function constructor to create a dynamic import that TypeScript
-  // and the bundler won't try to statically analyze
+  // Dynamic import that TS/bundler won't statically analyze
   const importFn = new Function('url', 'return import(url)') as (
     url: string
   ) => Promise<Record<string, unknown>>;
@@ -23,7 +30,7 @@ export async function loadSimulation(): Promise<SimulationExports> {
   await init('/simulation_bg.wasm');
 
   wasmInstance = {
-    greet: mod.greet as () => string,
+    Universe: mod.Universe as new (width: number, height: number) => SimulationUniverse,
     memory: (mod as Record<string, unknown>).memory as WebAssembly.Memory,
   };
 
