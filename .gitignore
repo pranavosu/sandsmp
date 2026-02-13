@@ -40,10 +40,11 @@ test-results/
 # Rust / Cargo
 target/
 **/*.rs.bk
-Cargo.lock
 
 # WASM build output
 crates/simulation/pkg/
+public/simulation.js
+public/simulation_bg.wasm
 
 # OS
 .DS_Store
