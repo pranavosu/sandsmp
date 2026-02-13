@@ -9,6 +9,8 @@ export interface SimulationExports {
 export interface SimulationUniverse {
   tick(): void;
   set_cell(x: number, y: number, species: number): void;
+  alloc_ghost_group(): number;
+  set_ghost(x: number, y: number, group: number): void;
   species_ptr(): number;
   width(): number;
   height(): number;
