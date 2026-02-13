@@ -24,7 +24,6 @@ export default function SimulationCanvas() {
   const rafRef = useRef<number>(0);
   const memoryRef = useRef<WebAssembly.Memory | null>(null);
 
-  // Keep input handler in sync with selected species / brush radius
   useEffect(() => {
     inputRef.current?.setSpecies(selectedSpecies);
   }, [selectedSpecies]);
@@ -40,20 +39,16 @@ export default function SimulationCanvas() {
     const memory = memoryRef.current;
     if (!universe || !renderer || !input || !memory) return;
 
-    // 1. Flush input → set_cell for each command
     const commands = input.flush();
     for (const cmd of commands) {
       universe.set_cell(cmd.x, cmd.y, cmd.species);
     }
 
-    // 2. Tick the simulation
     universe.tick();
 
-    // 3. Create Uint8Array view at species_ptr()
     const ptr = universe.species_ptr();
     const speciesData = new Uint8Array(memory.buffer, ptr, GRID_WIDTH * GRID_HEIGHT);
 
-    // 4. Render
     renderer.render(speciesData);
 
     rafRef.current = requestAnimationFrame(frameLoop);
@@ -66,7 +61,6 @@ export default function SimulationCanvas() {
     let cancelled = false;
 
     async function init() {
-      // Check WebGPU availability
       if (!navigator.gpu) {
         setErrorMsg('WebGPU is required. Please use a supported browser (Chrome 113+, Edge 113+).');
         setStatus('error');
@@ -74,17 +68,14 @@ export default function SimulationCanvas() {
       }
 
       try {
-        // Load WASM module
         const wasm = await loadSimulation();
 
         if (cancelled) return;
 
-        // Initialize Universe
         const universe = new wasm.Universe(GRID_WIDTH, GRID_HEIGHT);
         universeRef.current = universe;
         memoryRef.current = wasm.memory;
 
-        // Initialize Renderer
         const renderer = await Renderer.create(canvas!, GRID_WIDTH, GRID_HEIGHT);
         if (cancelled) {
           universe.free();
@@ -93,13 +84,11 @@ export default function SimulationCanvas() {
         }
         rendererRef.current = renderer;
 
-        // Initialize InputHandler
         const input = new InputHandler(canvas!, GRID_WIDTH, GRID_HEIGHT);
         inputRef.current = input;
 
         setStatus('running');
 
-        // Start frame loop
         rafRef.current = requestAnimationFrame(frameLoop);
       } catch (err) {
         if (cancelled) return;

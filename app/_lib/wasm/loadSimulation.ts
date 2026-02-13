@@ -1,6 +1,5 @@
-// Runtime loader for the simulation WASM module.
-// Loads the wasm-pack generated JS glue and .wasm from public/ at runtime,
-// bypassing the bundler entirely to avoid Turbopack .wasm resolution issues.
+// Loads wasm-pack generated JS glue + .wasm from public/ at runtime,
+// bypassing the bundler to avoid Turbopack .wasm resolution issues.
 
 export interface SimulationExports {
   Universe: new (width: number, height: number) => SimulationUniverse;
@@ -21,8 +20,7 @@ let wasmInstance: SimulationExports | null = null;
 export async function loadSimulation(): Promise<SimulationExports> {
   if (wasmInstance) return wasmInstance;
 
-  // Use Function constructor to create a dynamic import that TypeScript
-  // and the bundler won't try to statically analyze
+  // Dynamic import that TS/bundler won't statically analyze
   const importFn = new Function('url', 'return import(url)') as (
     url: string
   ) => Promise<Record<string, unknown>>;
