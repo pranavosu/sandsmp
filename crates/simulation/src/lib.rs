@@ -149,13 +149,11 @@ impl Universe {
         self.species_buffer.as_ptr()
     }
 
-    /// Grid width.
     #[must_use]
     pub fn width(&self) -> usize {
         self.grid.width
     }
 
-    /// Grid height.
     #[must_use]
     pub fn height(&self) -> usize {
         self.grid.height
@@ -163,7 +161,6 @@ impl Universe {
 }
 
 impl Universe {
-    /// Copy each cell's species byte into `species_buffer`.
     fn sync_species_buffer(&mut self) {
         for (i, cell) in self.grid.cells.iter().enumerate() {
             self.species_buffer[i] = cell.species as u8;

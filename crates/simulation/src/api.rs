@@ -3,9 +3,8 @@
 use crate::cell::Cell;
 use crate::Grid;
 
-/// Relative-offset accessor for element update functions.
-///
-/// Out-of-bounds reads return Wall, out-of-bounds writes are no-ops.
+/// Out-of-bounds reads return Wall, writes are no-ops.
+/// Clock is stamped on every `set`.
 #[derive(Debug)]
 pub struct SandApi<'a> {
     pub grid: &'a mut Grid,
@@ -24,7 +23,6 @@ impl<'a> SandApi<'a> {
         self.grid.get(self.x + dx, self.y + dy)
     }
 
-    /// Stamps the written cell's clock with the current generation.
     pub fn set(&mut self, dx: i32, dy: i32, cell: Cell) {
         let mut stamped = cell;
         stamped.clock = self.generation;

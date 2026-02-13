@@ -3,8 +3,8 @@
 use crate::api::SandApi;
 use crate::cell::Species;
 
-/// Update a Water cell. Priority: down → diagonal down → horizontal.
 pub fn update_water(api: &mut SandApi) {
+    // Priority: down → diagonal down → horizontal
     let below = api.get(0, 1);
     if below.species == Species::Empty {
         let me = api.get(0, 0);
@@ -13,7 +13,7 @@ pub fn update_water(api: &mut SandApi) {
         return;
     }
 
-    // Diagonal down: pick direction based on generation parity.
+    // Diagonal down, alternating direction
     let gen = api.generation;
     let (dx1, dx2) = if gen.is_multiple_of(2) { (-1, 1) } else { (1, -1) };
 
@@ -33,7 +33,7 @@ pub fn update_water(api: &mut SandApi) {
         return;
     }
 
-    // Horizontal spread: same direction preference.
+    // Horizontal spread
     let side1 = api.get(dx1, 0);
     if side1.species == Species::Empty {
         let me = api.get(0, 0);

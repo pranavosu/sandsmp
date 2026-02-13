@@ -3,26 +3,24 @@
 use crate::api::SandApi;
 use crate::cell::Species;
 
-/// Update a Sand cell. Attempts to move down, then diagonally down-left/right.
-/// Swaps with Water (density displacement) or moves into Empty.
 pub fn update_sand(api: &mut SandApi) {
     let below = api.get(0, 1);
     if below.species == Species::Empty {
-        // Fall straight down.
+        // Fall straight down
         let me = api.get(0, 0);
         api.set(0, 0, below);
         api.set(0, 1, me);
         return;
     }
     if below.species == Species::Water {
-        // Displace water by swapping.
+        // Displace water by swapping (sand is denser)
         let me = api.get(0, 0);
         api.set(0, 0, below);
         api.set(0, 1, me);
         return;
     }
 
-    // Try diagonal: pick direction based on generation parity to reduce bias.
+    // Try diagonal, alternating direction to reduce lateral bias
     let gen = api.generation;
     let (dx1, dx2) = if gen.is_multiple_of(2) { (-1, 1) } else { (1, -1) };
 
