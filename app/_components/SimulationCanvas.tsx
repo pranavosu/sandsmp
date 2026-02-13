@@ -62,16 +62,19 @@ export default function SimulationCanvas() {
   const handleReset = useCallback(() => {
     const universe = universeRef.current;
     if (!universe) return;
-    // Recreate universe
+    // Pause the frame loop so it can't touch the old universe
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
     const wid = universe.width();
     const hei = universe.height();
+    // Detach ref BEFORE freeing so the loop can't race
+    universeRef.current = null;
     universe.free();
-    // We need to reload — simplest approach is to just set cells to empty
-    // Actually we can't easily recreate, so let's paint everything empty
     loadSimulation().then(wasm => {
       const newUniverse = new wasm.Universe(wid, hei);
       universeRef.current = newUniverse;
       memoryRef.current = wasm.memory;
+      // Restart the frame loop
+      rafRef.current = requestAnimationFrame(() => frameLoopRef.current?.());
     });
   }, []);
 
@@ -94,6 +97,8 @@ export default function SimulationCanvas() {
         universe.tick();
       }
 
+      // Re-read memory.buffer AFTER tick() — WASM memory growth
+      // detaches the old ArrayBuffer, so we must never cache it.
       const ptr = universe.species_ptr();
       const speciesData = new Uint8Array(memory.buffer, ptr, GRID_WIDTH * GRID_HEIGHT);
       renderer.render(speciesData);
@@ -155,6 +160,12 @@ export default function SimulationCanvas() {
       rendererRef.current = null;
       inputRef.current?.destroy();
       inputRef.current = null;
+      // Explicitly free the WASM Universe so the FinalizationRegistry
+      // unregisters the pointer immediately. Without this, GC can free
+      // the old Universe at an unpredictable time — corrupting the WASM
+      // heap while a new Universe (from React Strict Mode re-mount) is
+      // actively using it, causing intermittent "memory access out of bounds".
+      universeRef.current?.free();
       universeRef.current = null;
       memoryRef.current = null;
     };
