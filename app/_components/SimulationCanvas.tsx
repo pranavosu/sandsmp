@@ -18,6 +18,7 @@ const ELEMENTS = [
   { label: 'Wall', species: 3, color: '#8a8a8a', shortcut: 'X' },
   { label: 'Fire', species: 4, color: '#e85d2a', shortcut: 'F' },
   { label: 'Ghost', species: 5, color: '#f0f0f7', shortcut: 'G' },
+  { label: 'Smoke', species: 6, color: '#7a7a7a', shortcut: 'K' },
 ] as const;
 
 const BRUSH_SIZES = [0, 1, 2, 4, 6, 10] as const;
@@ -62,9 +63,9 @@ function runFrame(refs: SimRefs) {
     universe.tick();
   }
 
-  const ptr = universe.species_ptr();
-  const speciesData = new Uint8Array(memory.buffer, ptr, GRID_WIDTH * GRID_HEIGHT);
-  renderer.render(speciesData);
+  const ptr = universe.cell_render_ptr();
+  const cellRenderData = new Uint8Array(memory.buffer, ptr, GRID_WIDTH * GRID_HEIGHT * 2);
+  renderer.render(cellRenderData);
   } catch (e) {
     refs.universe.current = null;
     refs.onError(e instanceof Error ? e.message : String(e));

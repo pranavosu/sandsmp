@@ -7,7 +7,6 @@ struct VertexOutput {
 
 @vertex
 fn vs(@builtin(vertex_index) vid: u32) -> VertexOutput {
-    // Full-screen triangle from vertex index (3 vertices, no vertex buffer)
     var out: VertexOutput;
     let x = f32(i32(vid & 1u) * 4 - 1);
     let y = f32(i32(vid >> 1u) * 4 - 1);
@@ -19,17 +18,31 @@ fn vs(@builtin(vertex_index) vid: u32) -> VertexOutput {
 @fragment
 fn fs(in: VertexOutput) -> @location(0) vec4<f32> {
     let coord = vec2<i32>(in.uv * vec2<f32>(256.0, 256.0));
-    let species = textureLoad(grid_tex, coord, 0).r;
+    let texel = textureLoad(grid_tex, coord, 0);
+    let species = texel.r;
+    let rb = texel.g;
 
-    // Color lookup table (Empty, Sand, Water, Wall, Fire)
     var color: vec4<f32>;
     switch species {
         case 0u: { color = vec4<f32>(0.1, 0.1, 0.12, 1.0); }   // Empty: dark
         case 1u: { color = vec4<f32>(0.86, 0.78, 0.45, 1.0); }  // Sand: tan
         case 2u: { color = vec4<f32>(0.2, 0.4, 0.8, 1.0); }     // Water: blue
         case 3u: { color = vec4<f32>(0.5, 0.5, 0.5, 1.0); }     // Wall: gray
-        case 4u: { color = vec4<f32>(0.9, 0.4, 0.1, 1.0); }     // Fire: orange
+        case 4u: {
+            // Fire: dark red → red → orange → yellow based on remaining lifetime (rb).
+            let t = clamp(f32(rb) / 50.0, 0.0, 1.0);
+            let r = mix(0.4, 1.0, t);
+            let g = mix(0.08, 0.85, t * t);
+            let b = mix(0.02, 0.1, t * t * t);
+            color = vec4<f32>(r, g, b, 1.0);
+        }
         case 5u: { color = vec4<f32>(0.95, 0.95, 0.97, 1.0); }  // Ghost: white
+        case 6u: {
+            // Smoke: gray that fades toward background as rb decreases.
+            let t = clamp(f32(rb) / 200.0, 0.0, 1.0);
+            let gray = mix(0.15, 0.55, t);
+            color = vec4<f32>(gray, gray, gray * 1.05, 1.0);
+        }
         default: { color = vec4<f32>(1.0, 0.0, 1.0, 1.0); }     // Magenta error
     }
     return color;

@@ -26,6 +26,17 @@ export class Universe {
         return ret;
     }
     /**
+     * Pointer to the 2-byte-per-cell render buffer (species, rb).
+     *
+     * Layout: `[species_0, rb_0, species_1, rb_1, ...]`
+     * Length: `width × height × 2` bytes. Upload as an `rg8uint` texture.
+     * @returns {number}
+     */
+    cell_render_ptr() {
+        const ret = wasm.universe_cell_render_ptr(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
      * @returns {number}
      */
     height() {

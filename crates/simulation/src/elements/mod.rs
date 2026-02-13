@@ -3,6 +3,7 @@
 mod fire;
 pub(crate) mod ghost;
 mod sand;
+mod smoke;
 mod water;
 
 use crate::api::SandApi;
@@ -17,6 +18,7 @@ pub fn update_cell(species: Species, api: &mut SandApi) {
         Species::Water => water::update_water(api),
         Species::Fire => fire::update_fire(api),
         Species::Ghost => ghost::update_ghost(api),
+        Species::Smoke => smoke::update_smoke(api),
         Species::Empty | Species::Wall => {}
     }
 }
@@ -34,8 +36,8 @@ mod tests {
     use proptest::prelude::*;
 
     /// Helper: count occurrences of each species in the grid.
-    fn species_counts(grid: &Grid) -> [usize; 6] {
-        let mut counts = [0usize; 6];
+    fn species_counts(grid: &Grid) -> [usize; 7] {
+        let mut counts = [0usize; 7];
         for cell in &grid.cells {
             counts[cell.species as usize] += 1;
         }
@@ -125,6 +127,9 @@ mod tests {
 
     // Feature: single-player-simulation-mvp, Property 13: Species conservation on movement
     // **Validates: Requirements 5.8**
+    // Fire decays to Smoke and Smoke decays to Empty, so we check that
+    // Sand + Water + Wall + Ghost counts are preserved, and that the total
+    // Fire + Smoke + Empty count is conserved (fire→smoke→empty chain).
     proptest! {
         #[test]
         fn prop_species_conservation_on_movement(

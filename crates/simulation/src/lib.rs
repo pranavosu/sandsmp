@@ -175,6 +175,9 @@ pub struct Universe {
     grid: Grid,
     /// One byte per cell (species only), length = width × height.
     species_buffer: Vec<u8>,
+    /// Two bytes per cell (species, rb), length = width × height × 2.
+    /// Used by the GPU shader for color variation (fire gradient, smoke fade).
+    cell_render_buffer: Vec<u8>,
     /// Monotonically increasing counter for ghost group IDs (1–255, wraps).
     next_ghost_group: u8,
 }
@@ -196,9 +199,11 @@ impl Universe {
     pub fn new(width: usize, height: usize) -> Self {
         let grid = Grid::new(width, height);
         let species_buffer = vec![Species::Empty as u8; width * height];
+        let cell_render_buffer = vec![0u8; width * height * 2];
         Self {
             grid,
             species_buffer,
+            cell_render_buffer,
             next_ghost_group: 1,
         }
     }
@@ -207,6 +212,7 @@ impl Universe {
     pub fn tick(&mut self) {
         self.grid.tick();
         self.sync_species_buffer();
+        self.sync_cell_render_buffer();
     }
 
     /// Paint a cell at `(x, y)` with the given species value.
@@ -223,16 +229,24 @@ impl Universe {
             3 => Species::Wall,
             4 => Species::Fire,
             5 => Species::Ghost,
+            6 => Species::Smoke,
             _ => return, // unknown species — ignore
         };
         let mut cell = Cell::new(s);
         // Fire starts with a lifetime counter so it doesn't vanish instantly.
         if s == Species::Fire {
-            cell.rb = 120;
+            // Randomize lifetime using position as cheap entropy.
+            cell.rb = 20_u8.wrapping_add(((x ^ y) % 30) as u8);
+            cell.ra = (x.wrapping_mul(7) ^ y.wrapping_mul(13)) as u8;
         }
         // Water uses ra parity as persistent flow direction. Seed from
         // position so adjacent particles start with varied directions.
         if s == Species::Water {
+            cell.ra = (x ^ y) as u8;
+        }
+        // Smoke starts with a lifetime for fade-out.
+        if s == Species::Smoke {
+            cell.rb = 100_u8.wrapping_add(((x ^ y) % 100) as u8);
             cell.ra = (x ^ y) as u8;
         }
         self.grid.set(x as i32, y as i32, cell);
@@ -265,6 +279,15 @@ impl Universe {
         self.species_buffer.as_ptr()
     }
 
+    /// Pointer to the 2-byte-per-cell render buffer (species, rb).
+    ///
+    /// Layout: `[species_0, rb_0, species_1, rb_1, ...]`
+    /// Length: `width × height × 2` bytes. Upload as an `rg8uint` texture.
+    #[must_use]
+    pub fn cell_render_ptr(&self) -> *const u8 {
+        self.cell_render_buffer.as_ptr()
+    }
+
     #[must_use]
     pub fn width(&self) -> usize {
         self.grid.width
@@ -280,6 +303,13 @@ impl Universe {
     fn sync_species_buffer(&mut self) {
         for (i, cell) in self.grid.cells.iter().enumerate() {
             self.species_buffer[i] = cell.species as u8;
+        }
+    }
+
+    fn sync_cell_render_buffer(&mut self) {
+        for (i, cell) in self.grid.cells.iter().enumerate() {
+            self.cell_render_buffer[i * 2] = cell.species as u8;
+            self.cell_render_buffer[i * 2 + 1] = cell.rb;
         }
     }
 }
@@ -444,7 +474,7 @@ mod tests {
         #[test]
         fn prop_species_buffer_matches_grid_state(
             placements in proptest::collection::vec(
-                (0usize..256, 0usize..256, 0u8..6),
+                (0usize..256, 0usize..256, 0u8..7),
                 0..50,
             ),
             ticks in 1u32..10,

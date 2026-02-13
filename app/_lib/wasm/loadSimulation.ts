@@ -12,6 +12,7 @@ export interface SimulationUniverse {
   alloc_ghost_group(): number;
   set_ghost(x: number, y: number, group: number): void;
   species_ptr(): number;
+  cell_render_ptr(): number;
   width(): number;
   height(): number;
   free(): void;
