@@ -48,6 +48,28 @@ pub fn greet() -> String {
 mod tests {
     use super::*;
     use cell::Species;
+    use proptest::prelude::*;
+
+    fn arb_species() -> impl Strategy<Value = Species> {
+        prop_oneof![
+            Just(Species::Empty),
+            Just(Species::Sand),
+            Just(Species::Water),
+            Just(Species::Wall),
+            Just(Species::Fire),
+        ]
+    }
+
+    fn arb_cell() -> impl Strategy<Value = Cell> {
+        (arb_species(), any::<u8>(), any::<u8>(), any::<u8>()).prop_map(
+            |(species, ra, rb, clock)| Cell {
+                species,
+                ra,
+                rb,
+                clock,
+            },
+        )
+    }
 
     #[test]
     fn grid_new_initializes_all_empty() {
@@ -98,5 +120,43 @@ mod tests {
         assert!(!grid.in_bounds(256, 0));
         assert!(!grid.in_bounds(0, -1));
         assert!(!grid.in_bounds(0, 256));
+    }
+
+    // Feature: single-player-simulation-mvp, Property 2: Grid in-bounds get/set round trip
+    // **Validates: Requirements 2.3**
+    proptest! {
+        #[test]
+        fn prop_grid_in_bounds_get_set_round_trip(
+            x in 0i32..256,
+            y in 0i32..256,
+            cell in arb_cell(),
+        ) {
+            let mut grid = Grid::new(256, 256);
+            grid.set(x, y, cell);
+            let retrieved = grid.get(x, y);
+            prop_assert_eq!(retrieved, cell);
+        }
+    }
+
+    // Feature: single-player-simulation-mvp, Property 3: Grid out-of-bounds returns Wall
+    // **Validates: Requirements 2.4**
+    proptest! {
+        #[test]
+        fn prop_grid_out_of_bounds_returns_wall_and_unchanged(
+            x in prop_oneof![(-1000i32..0), (256i32..1000)],
+            y in prop_oneof![(-1000i32..0), (256i32..1000)],
+            cell in arb_cell(),
+        ) {
+            let mut grid = Grid::new(256, 256);
+            let before: Vec<Cell> = grid.cells.clone();
+
+            // get returns Wall
+            let got = grid.get(x, y);
+            prop_assert_eq!(got.species, Species::Wall);
+
+            // set is a no-op
+            grid.set(x, y, cell);
+            prop_assert_eq!(grid.cells, before);
+        }
     }
 }
