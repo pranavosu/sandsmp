@@ -1,6 +1,12 @@
+//! Relative-offset API for element update functions.
+
 use crate::cell::Cell;
 use crate::Grid;
 
+/// Relative-offset accessor for element update functions.
+///
+/// Out-of-bounds reads return Wall, out-of-bounds writes are no-ops.
+#[derive(Debug)]
 pub struct SandApi<'a> {
     pub grid: &'a mut Grid,
     pub x: i32,
@@ -10,16 +16,15 @@ pub struct SandApi<'a> {
 
 impl<'a> SandApi<'a> {
     pub fn new(grid: &'a mut Grid, x: i32, y: i32, generation: u8) -> Self {
-        SandApi { grid, x, y, generation }
+        Self { grid, x, y, generation }
     }
 
-    /// Get cell at relative offset. Out-of-bounds returns Wall.
+    #[must_use]
     pub fn get(&self, dx: i32, dy: i32) -> Cell {
         self.grid.get(self.x + dx, self.y + dy)
     }
 
-    /// Set cell at relative offset. Out-of-bounds is a no-op.
-    /// Stamps the clock field with current generation.
+    /// Stamps the written cell's clock with the current generation.
     pub fn set(&mut self, dx: i32, dy: i32, cell: Cell) {
         let mut stamped = cell;
         stamped.clock = self.generation;
@@ -63,8 +68,7 @@ mod tests {
         ) {
             let target_x = base_x + dx;
             let target_y = base_y + dy;
-            // Only test in-bounds targets
-            prop_assume!(target_x >= 0 && target_x < 256 && target_y >= 0 && target_y < 256);
+            prop_assume!((0..256).contains(&target_x) && (0..256).contains(&target_y));
 
             let mut grid = Grid::new(256, 256);
             let mut api = SandApi::new(&mut grid, base_x, base_y, generation);
@@ -93,22 +97,18 @@ mod tests {
         ) {
             let target_x = base_x + dx;
             let target_y = base_y + dy;
-            // Only test out-of-bounds targets
-            prop_assume!(target_x < 0 || target_x >= 256 || target_y < 0 || target_y >= 256);
+            prop_assume!(!(0..256).contains(&target_x) || !(0..256).contains(&target_y));
 
             let mut grid = Grid::new(256, 256);
             let before: Vec<Cell> = grid.cells.clone();
 
             let mut api = SandApi::new(&mut grid, base_x, base_y, generation);
 
-            // get returns Wall
             let got = api.get(dx, dy);
             prop_assert_eq!(got.species, Species::Wall);
 
-            // set is a no-op
             api.set(dx, dy, cell);
             prop_assert_eq!(api.grid.cells.as_slice(), before.as_slice());
         }
     }
 }
-
