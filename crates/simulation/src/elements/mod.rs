@@ -23,31 +23,10 @@ pub fn update_cell(species: Species, api: &mut SandApi) {
 /// element update functions. This is a test helper until `Grid::tick()` is
 /// implemented in task 7.
 #[cfg(test)]
+/// Simulate a single tick on the grid. Delegates to `Grid::tick()`.
+#[cfg(test)]
 pub(crate) fn simulate_tick(grid: &mut crate::Grid) {
-    grid.generation = grid.generation.wrapping_add(1);
-    let gen = grid.generation;
-    let w = grid.width as i32;
-    let h = grid.height as i32;
-
-    for y in (0..h).rev() {
-        let x_range: Box<dyn Iterator<Item = i32>> = if gen % 2 == 0 {
-            Box::new(0..w)
-        } else {
-            Box::new((0..w).rev())
-        };
-        for x in x_range {
-            let cell = grid.get(x, y);
-            if cell.species == Species::Empty || cell.species == Species::Wall {
-                continue;
-            }
-            if cell.clock == gen {
-                continue;
-            }
-            let species = cell.species;
-            let mut api = SandApi::new(grid, x, y, gen);
-            update_cell(species, &mut api);
-        }
-    }
+    grid.tick();
 }
 
 #[cfg(test)]

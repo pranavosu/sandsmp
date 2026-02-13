@@ -46,6 +46,37 @@ impl Grid {
             self.cells[y as usize * self.width + x as usize] = cell;
         }
     }
+
+    /// Advance the simulation by one tick.
+    ///
+    /// Scans bottom-to-top, alternating horizontal direction each generation.
+    /// Skips Empty/Wall cells and cells already updated this generation (clock == generation).
+    pub fn tick(&mut self) {
+        self.generation = self.generation.wrapping_add(1);
+        let gen = self.generation;
+        let w = self.width as i32;
+        let h = self.height as i32;
+
+        for y in (0..h).rev() {
+            let x_range: Box<dyn Iterator<Item = i32>> = if gen % 2 == 0 {
+                Box::new(0..w)
+            } else {
+                Box::new((0..w).rev())
+            };
+            for x in x_range {
+                let cell = self.get(x, y);
+                if cell.species == Species::Empty || cell.species == Species::Wall {
+                    continue;
+                }
+                if cell.clock == gen {
+                    continue;
+                }
+                let species = cell.species;
+                let mut sand_api = api::SandApi::new(self, x, y, gen);
+                elements::update_cell(species, &mut sand_api);
+            }
+        }
+    }
 }
 
 #[wasm_bindgen]
@@ -165,6 +196,45 @@ mod tests {
 
             grid.set(x, y, cell);
             prop_assert_eq!(grid.cells, before);
+        }
+    }
+
+    // Feature: single-player-simulation-mvp, Property 6: Generation counter wraps correctly
+    // **Validates: Requirements 3.3**
+    proptest! {
+        #[test]
+        fn prop_generation_counter_wraps_correctly(n in 1u32..1024) {
+            let mut grid = Grid::new(16, 16);
+            for _ in 0..n {
+                grid.tick();
+            }
+            prop_assert_eq!(grid.generation, (n % 256) as u8);
+        }
+    }
+
+    // Feature: single-player-simulation-mvp, Property 7: Clock-based double-update prevention
+    // **Validates: Requirements 3.4**
+    proptest! {
+        #[test]
+        fn prop_clock_prevents_double_update(
+            x in 0i32..16,
+            y in 0i32..15,  // not bottom row so Sand could fall
+        ) {
+            let mut grid = Grid::new(16, 16);
+
+            // Place a Sand cell that would normally fall down (empty below).
+            let mut sand = Cell::new(Species::Sand);
+            // Pre-stamp the clock to the NEXT generation (generation starts at 0,
+            // tick increments to 1 before scanning).
+            sand.clock = 1;
+            grid.set(x, y, sand);
+
+            grid.tick();
+
+            // The Sand cell should NOT have moved because its clock matched the
+            // current generation, so the tick loop skipped it.
+            prop_assert_eq!(grid.get(x, y).species, Species::Sand);
+            prop_assert_eq!(grid.get(x, y + 1).species, Species::Empty);
         }
     }
 }
