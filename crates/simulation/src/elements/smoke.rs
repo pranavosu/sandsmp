@@ -1,19 +1,19 @@
-//! Smoke element: rises slowly with random horizontal drift, fades over time.
+//! Smoke element: candle-smoke two-phase behavior.
 //!
-//! Smoke uses `rb` as a lifetime counter (starts high, decrements each tick).
-//! When `rb` reaches 0 the particle dies. The shader uses `rb` to fade
-//! smoke from opaque gray to transparent as it ages.
+//! **Laminar phase** (young, high `rb`): rises fast and straight.
+//!
+//! **Turbulent phase** (older, low `rb`): stalls heavily, drifts
+//! randomly, and spreads out into a diffuse cloud.
 
 use crate::api::SandApi;
 use crate::cell::{Cell, Species};
 
-/// One-in-N chance of drifting horizontally each tick.
-const DRIFT_CHANCE: u8 = 3;
+/// `rb` below this → turbulent dispersal phase.
+const TURBULENT_THRESHOLD: u8 = 120;
 
 pub fn update_smoke(api: &mut SandApi) {
     let me = api.get(0, 0);
 
-    // Expire when lifetime runs out.
     if me.rb == 0 {
         api.set(0, 0, Cell::empty());
         return;
@@ -22,48 +22,89 @@ pub fn update_smoke(api: &mut SandApi) {
     let mut updated = me;
     updated.rb = me.rb.saturating_sub(1);
 
-    // Try to rise.
+    let gen = api.generation;
+    let laminar = me.rb > TURBULENT_THRESHOLD;
+
+    // ── Laminar: fast, straight rise ──
+    if laminar {
+        if gen.wrapping_add(me.ra).wrapping_mul(7) % 10 < 1 {
+            api.set(0, 0, updated);
+            return;
+        }
+        let above = api.get(0, -1);
+        if above.species == Species::Empty {
+            api.set(0, 0, Cell::empty());
+            api.set(0, -1, updated);
+            return;
+        }
+        let dir: i32 = if me.ra % 2 == 0 { -1 } else { 1 };
+        for &d in &[dir, -dir] {
+            if api.get(d, -1).species == Species::Empty {
+                api.set(0, 0, Cell::empty());
+                api.set(d, -1, updated);
+                return;
+            }
+        }
+        api.set(0, 0, updated);
+        return;
+    }
+
+    // ── Turbulent: stall + random drift ──
+
+    // Stall ~60%.
+    let stall_roll = gen.wrapping_add(me.ra).wrapping_mul(7) % 10;
+    if stall_roll < 6 {
+        // Re-randomize drift while stalling.
+        if gen.wrapping_add(me.ra) % 5 == 0 {
+            updated.ra = updated.ra.wrapping_add(gen);
+        }
+        api.set(0, 0, updated);
+        return;
+    }
+
+    let dir: i32 = if me.ra % 2 == 0 { -1 } else { 1 };
+
+    // ~1-in-3 ticks: drift diagonally.
+    if me.ra.wrapping_add(gen) % 3 == 0 {
+        if api.get(dir, -1).species == Species::Empty {
+            api.set(0, 0, Cell::empty());
+            api.set(dir, -1, updated);
+            return;
+        }
+    }
+
+    // Straight up.
+    if api.get(0, -1).species == Species::Empty {
+        api.set(0, 0, Cell::empty());
+        api.set(0, -1, updated);
+        return;
+    }
+
+    // Fallback diagonals.
+    for &d in &[dir, -dir] {
+        if api.get(d, -1).species == Species::Empty {
+            api.set(0, 0, Cell::empty());
+            api.set(d, -1, updated);
+            return;
+        }
+    }
+
+    // Swap with older smoke above.
     let above = api.get(0, -1);
-    if above.species == Species::Empty {
+    if above.species == Species::Smoke && above.rb < me.rb {
         api.set(0, 0, above);
         api.set(0, -1, updated);
         return;
     }
 
-    // Random horizontal drift — gives smoke a billowy look.
-    let gen = api.generation;
-    if gen % DRIFT_CHANCE == 0 {
-        let dx: i32 = if me.ra % 2 == 0 { -1 } else { 1 };
-        let side = api.get(dx, 0);
-        if side.species == Species::Empty {
-            api.set(0, 0, side);
-            api.set(dx, 0, updated);
-            return;
-        }
-        // Try the other side.
-        let other = api.get(-dx, 0);
-        if other.species == Species::Empty {
-            api.set(0, 0, other);
-            api.set(-dx, 0, updated);
-            return;
-        }
-    }
-
-    // Try diagonal up.
-    let dx: i32 = if gen % 2 == 0 { -1 } else { 1 };
-    let diag = api.get(dx, -1);
-    if diag.species == Species::Empty {
-        api.set(0, 0, diag);
-        api.set(dx, -1, updated);
-        return;
-    }
-    let diag2 = api.get(-dx, -1);
-    if diag2.species == Species::Empty {
-        api.set(0, 0, diag2);
-        api.set(-dx, -1, updated);
+    // Horizontal escape.
+    if api.get(dir, 0).species == Species::Empty {
+        api.set(0, 0, Cell::empty());
+        api.set(dir, 0, updated);
         return;
     }
 
-    // Stuck — just age in place.
+    // Stuck — flip drift.
+    updated.ra ^= 1;
     api.set(0, 0, updated);
 }

@@ -246,7 +246,7 @@ impl Universe {
         }
         // Smoke starts with a lifetime for fade-out.
         if s == Species::Smoke {
-            cell.rb = 100_u8.wrapping_add(((x ^ y) % 100) as u8);
+            cell.rb = 80_u8.wrapping_add(((x ^ y) % 120) as u8);
             cell.ra = (x ^ y) as u8;
         }
         self.grid.set(x as i32, y as i32, cell);

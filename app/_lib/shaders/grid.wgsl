@@ -38,10 +38,10 @@ fn fs(in: VertexOutput) -> @location(0) vec4<f32> {
         }
         case 5u: { color = vec4<f32>(0.95, 0.95, 0.97, 1.0); }  // Ghost: white
         case 6u: {
-            // Smoke: gray that fades toward background as rb decreases.
-            let t = clamp(f32(rb) / 200.0, 0.0, 1.0);
-            let gray = mix(0.15, 0.55, t);
-            color = vec4<f32>(gray, gray, gray * 1.05, 1.0);
+            // Smoke: subtle gray that fades toward background as rb decreases.
+            let t = clamp(f32(rb) / 100.0, 0.0, 1.0);
+            let gray = mix(0.12, 0.35, t);
+            color = vec4<f32>(gray, gray, gray * 1.08, 1.0);
         }
         default: { color = vec4<f32>(1.0, 0.0, 1.0, 1.0); }     // Magenta error
     }
