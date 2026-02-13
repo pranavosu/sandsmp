@@ -230,6 +230,11 @@ impl Universe {
         if s == Species::Fire {
             cell.rb = 120;
         }
+        // Water uses ra parity as persistent flow direction. Seed from
+        // position so adjacent particles start with varied directions.
+        if s == Species::Water {
+            cell.ra = (x ^ y) as u8;
+        }
         self.grid.set(x as i32, y as i32, cell);
     }
 

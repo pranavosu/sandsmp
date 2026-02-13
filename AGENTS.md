@@ -1,5 +1,7 @@
 You MUST run typecheck after every task that updates TS files - `npx tsc --noEmit --pretty 2>&1 | head -20`
 
+You MUST NOT use wasm-pack unless you need to verify the rust build. 
+
 # Rust
 
 If you're working on rust code refer to ./RUST.md
