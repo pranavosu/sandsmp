@@ -41,10 +41,8 @@ test-results/
 target/
 **/*.rs.bk
 
-# WASM build output
+# WASM build output (source pkg, not the public copies)
 crates/simulation/pkg/
-public/simulation.js
-public/simulation_bg.wasm
 
 # OS
 .DS_Store
