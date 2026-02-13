@@ -1,3 +1,4 @@
+pub mod api;
 pub mod cell;
 
 use cell::{Cell, Species};
