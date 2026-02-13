@@ -9,7 +9,7 @@ import { ghostStamp, GHOST_SPECIES } from '@/app/_lib/stamps';
 const GRID_WIDTH = 256;
 const GRID_HEIGHT = 256;
 
-type Status = 'loading' | 'running' | 'error';
+type Status = 'loading' | 'running' | 'error' | 'crashed';
 
 const ELEMENTS = [
   { label: 'Empty', species: 0, color: '#3d352c', shortcut: 'E' },
@@ -33,6 +33,7 @@ interface SimRefs {
   fpsFrames: React.RefObject<number>;
   fpsLastTime: React.RefObject<number>;
   setFps: (fps: number) => void;
+  onError: (msg: string) => void;
 }
 
 /** Module-level frame loop — no hooks, no self-reference issues. */
@@ -43,10 +44,11 @@ function runFrame(refs: SimRefs) {
   const memory = refs.memory.current;
   if (!universe || !renderer || !input || !memory) return;
 
-  const commands = input.flush();
-  for (const cmd of commands) {
-    if (cmd.species === GHOST_SPECIES) {
-      const group = universe.alloc_ghost_group();
+  try {
+    const commands = input.flush();
+    for (const cmd of commands) {
+      if (cmd.species === GHOST_SPECIES) {
+        const group = universe.alloc_ghost_group();
       const stampCmds = ghostStamp(cmd.x, cmd.y, GHOST_SPECIES, GRID_WIDTH, GRID_HEIGHT);
       for (const sc of stampCmds) {
         universe.set_ghost(sc.x, sc.y, group);
@@ -63,6 +65,11 @@ function runFrame(refs: SimRefs) {
   const ptr = universe.species_ptr();
   const speciesData = new Uint8Array(memory.buffer, ptr, GRID_WIDTH * GRID_HEIGHT);
   renderer.render(speciesData);
+  } catch (e) {
+    refs.universe.current = null;
+    refs.onError(e instanceof Error ? e.message : String(e));
+    return;
+  }
 
   refs.fpsFrames.current!++;
   const now = performance.now();
@@ -104,6 +111,10 @@ export default function SimulationCanvas() {
     fpsFrames,
     fpsLastTime,
     setFps,
+    onError: (msg: string) => {
+      setErrorMsg(msg);
+      setStatus('crashed');
+    },
   });
 
   useEffect(() => { pausedRef.current = paused; }, [paused]);
@@ -114,18 +125,16 @@ export default function SimulationCanvas() {
   const handleReset = useCallback(() => {
     const universe = universeRef.current;
     if (!universe) return;
-    // Pause the frame loop so it can't touch the old universe
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = 0;
     const wid = universe.width();
     const hei = universe.height();
-    // Detach ref BEFORE freeing so the loop can't race
     universeRef.current = null;
     universe.free();
     loadSimulation().then(wasm => {
       const newUniverse = new wasm.Universe(wid, hei);
       universeRef.current = newUniverse;
       memoryRef.current = wasm.memory;
-      // Restart the frame loop
       rafRef.current = requestAnimationFrame(() => runFrame(simRefs.current));
     });
   }, []);
@@ -162,12 +171,20 @@ export default function SimulationCanvas() {
         const wasm = await loadSimulation();
         if (cancelled) return;
 
+        // Create the universe but do NOT store in refs yet — there's another
+        // await below and Strict Mode cleanup can fire between the two awaits.
         const universe = new wasm.Universe(GRID_WIDTH, GRID_HEIGHT);
-        universeRef.current = universe;
-        memoryRef.current = wasm.memory;
 
         const renderer = await Renderer.create(canvas!, GRID_WIDTH, GRID_HEIGHT);
-        if (cancelled) { universe.free(); renderer.destroy(); return; }
+        if (cancelled) {
+          universe.free();
+          renderer.destroy();
+          return;
+        }
+
+        // All async work done — safe to commit to refs in one synchronous block.
+        universeRef.current = universe;
+        memoryRef.current = wasm.memory;
         rendererRef.current = renderer;
 
         const input = new InputHandler(canvas!, GRID_WIDTH, GRID_HEIGHT);
@@ -186,16 +203,14 @@ export default function SimulationCanvas() {
 
     return () => {
       cancelled = true;
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = 0;
+      }
       rendererRef.current?.destroy();
       rendererRef.current = null;
       inputRef.current?.destroy();
       inputRef.current = null;
-      // Explicitly free the WASM Universe so the FinalizationRegistry
-      // unregisters the pointer immediately. Without this, GC can free
-      // the old Universe at an unpredictable time — corrupting the WASM
-      // heap while a new Universe (from React Strict Mode re-mount) is
-      // actively using it, causing intermittent "memory access out of bounds".
       universeRef.current?.free();
       universeRef.current = null;
       memoryRef.current = null;
@@ -220,13 +235,25 @@ export default function SimulationCanvas() {
             <div style={styles.errorText}>{errorMsg}</div>
           </div>
         )}
+        {status === 'crashed' && (
+          <div style={styles.errorOverlay} role="alert">
+            <div style={styles.errorIcon}>💥</div>
+            <div style={styles.errorText}>Simulation crashed</div>
+            <button
+              onClick={() => window.location.reload()}
+              style={styles.reloadBtn}
+            >
+              Reload
+            </button>
+          </div>
+        )}
         <canvas
           ref={canvasRef}
           width={GRID_WIDTH}
           height={GRID_HEIGHT}
           style={{
             ...styles.canvas,
-            display: status === 'error' ? 'none' : 'block',
+            display: (status === 'error' || status === 'crashed') ? 'none' : 'block',
           }}
         />
       </div>
@@ -414,6 +441,16 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: 'center',
     lineHeight: 1.5,
     maxWidth: '320px',
+  },
+  reloadBtn: {
+    marginTop: '8px',
+    padding: '6px 18px',
+    border: '1px solid #3d352c',
+    borderRadius: '6px',
+    background: '#2a2520',
+    color: '#e8ddd0',
+    fontSize: '13px',
+    cursor: 'pointer',
   },
   fpsBadge: {
     position: 'fixed',

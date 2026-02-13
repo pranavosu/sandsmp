@@ -18,23 +18,31 @@ export interface SimulationUniverse {
 }
 
 let wasmInstance: SimulationExports | null = null;
+let wasmLoading: Promise<SimulationExports> | null = null;
 
 export async function loadSimulation(): Promise<SimulationExports> {
   if (wasmInstance) return wasmInstance;
 
-  // Dynamic import that TS/bundler won't statically analyze
-  const importFn = new Function('url', 'return import(url)') as (
-    url: string
-  ) => Promise<Record<string, unknown>>;
+  // Deduplicate concurrent calls (e.g. React Strict Mode double-mount).
+  if (wasmLoading) return wasmLoading;
 
-  const mod = await importFn('/simulation.js');
-  const init = mod.default as (path: string) => Promise<{ memory: WebAssembly.Memory }>;
-  const instance = await init('/simulation_bg.wasm');
+  wasmLoading = (async () => {
+    // Dynamic import that TS/bundler won't statically analyze
+    const importFn = new Function('url', 'return import(url)') as (
+      url: string
+    ) => Promise<Record<string, unknown>>;
 
-  wasmInstance = {
-    Universe: mod.Universe as new (width: number, height: number) => SimulationUniverse,
-    memory: instance.memory,
-  };
+    const mod = await importFn('/simulation.js');
+    const init = mod.default as (path: string) => Promise<{ memory: WebAssembly.Memory }>;
+    const instance = await init('/simulation_bg.wasm');
 
-  return wasmInstance;
+    wasmInstance = {
+      Universe: mod.Universe as new (width: number, height: number) => SimulationUniverse,
+      memory: instance.memory,
+    };
+
+    return wasmInstance;
+  })();
+
+  return wasmLoading;
 }
