@@ -43,6 +43,7 @@ mod tests {
             Just(Species::Water),
             Just(Species::Wall),
             Just(Species::Fire),
+            Just(Species::Ghost),
         ]
     }
 

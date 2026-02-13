@@ -1,6 +1,7 @@
 //! Per-element update functions dispatched from the tick loop.
 
 mod fire;
+pub(crate) mod ghost;
 mod sand;
 mod water;
 
@@ -15,6 +16,7 @@ pub fn update_cell(species: Species, api: &mut SandApi) {
         Species::Sand => sand::update_sand(api),
         Species::Water => water::update_water(api),
         Species::Fire => fire::update_fire(api),
+        Species::Ghost => ghost::update_ghost(api),
         Species::Empty | Species::Wall => {}
     }
 }
@@ -32,8 +34,8 @@ mod tests {
     use proptest::prelude::*;
 
     /// Helper: count occurrences of each species in the grid.
-    fn species_counts(grid: &Grid) -> [usize; 5] {
-        let mut counts = [0usize; 5];
+    fn species_counts(grid: &Grid) -> [usize; 6] {
+        let mut counts = [0usize; 6];
         for cell in &grid.cells {
             counts[cell.species as usize] += 1;
         }
@@ -132,6 +134,7 @@ mod tests {
                     Just(Species::Sand),
                     Just(Species::Water),
                     Just(Species::Wall),
+                    Just(Species::Ghost),
                 ],
                 16 * 16,
             )
@@ -150,6 +153,7 @@ mod tests {
             prop_assert_eq!(before[Species::Sand as usize], after[Species::Sand as usize]);
             prop_assert_eq!(before[Species::Water as usize], after[Species::Water as usize]);
             prop_assert_eq!(before[Species::Wall as usize], after[Species::Wall as usize]);
+            prop_assert_eq!(before[Species::Ghost as usize], after[Species::Ghost as usize]);
         }
     }
 }

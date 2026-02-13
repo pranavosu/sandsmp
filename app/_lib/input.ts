@@ -91,6 +91,7 @@ export class InputHandler {
   private gridHeight: number;
   private selectedSpecies: number = 1; // Sand by default
   private brushRadius: number = 2;
+  private stampMode: boolean = false;
   private isDrawing: boolean = false;
   private lastPos: { x: number; y: number } | null = null;
   private commands: DrawCommand[] = [];
@@ -122,6 +123,10 @@ export class InputHandler {
     this.brushRadius = Math.max(0, radius);
   }
 
+  setStampMode(stamp: boolean): void {
+    this.stampMode = stamp;
+  }
+
   /** Returns pending draw commands since last call, then clears the buffer. */
   flush(): DrawCommand[] {
     const out = this.commands;
@@ -145,15 +150,16 @@ export class InputHandler {
   }
 
   private handlePointerMove(e: PointerEvent): void {
-    if (!this.isDrawing) return;
-    const pos = this.screenToGrid(e);
-    if (this.lastPos) {
-      this.interpolateAndPaint(this.lastPos.x, this.lastPos.y, pos.x, pos.y);
-    } else {
-      this.paintBrush(pos.x, pos.y);
+      if (!this.isDrawing) return;
+      if (this.stampMode) return; // stamp = one placement per mousedown only
+      const pos = this.screenToGrid(e);
+      if (this.lastPos) {
+        this.interpolateAndPaint(this.lastPos.x, this.lastPos.y, pos.x, pos.y);
+      } else {
+        this.paintBrush(pos.x, pos.y);
+      }
+      this.lastPos = pos;
     }
-    this.lastPos = pos;
-  }
 
   private handlePointerUp(): void {
     this.isDrawing = false;
@@ -188,6 +194,11 @@ export class InputHandler {
    * Paint a filled circle of cells around (cx, cy) with the current brush radius.
    */
   private paintBrush(cx: number, cy: number): void {
+    if (this.stampMode) {
+      // Stamp mode: emit only the center point; the consumer expands it
+      this.commands.push({ x: cx, y: cy, species: this.selectedSpecies });
+      return;
+    }
     const cells = brushCells(cx, cy, this.brushRadius, this.gridWidth, this.gridHeight);
     for (const c of cells) {
       this.commands.push({ x: c.x, y: c.y, species: this.selectedSpecies });

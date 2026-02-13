@@ -11,6 +11,7 @@ pub enum Species {
     Water = 2,
     Wall = 3,
     Fire = 4,
+    Ghost = 5,
 }
 
 impl fmt::Display for Species {
@@ -21,6 +22,7 @@ impl fmt::Display for Species {
             Self::Water => write!(f, "Water"),
             Self::Wall => write!(f, "Wall"),
             Self::Fire => write!(f, "Fire"),
+            Self::Ghost => write!(f, "Ghost"),
         }
     }
 }
@@ -87,6 +89,7 @@ mod tests {
         assert_eq!(Species::Water as u8, 2);
         assert_eq!(Species::Wall as u8, 3);
         assert_eq!(Species::Fire as u8, 4);
+        assert_eq!(Species::Ghost as u8, 5);
     }
 
     #[test]

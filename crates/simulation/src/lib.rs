@@ -55,6 +55,10 @@ impl Grid {
     pub fn tick(&mut self) {
         self.generation = self.generation.wrapping_add(1);
         let gen = self.generation;
+
+        // Bulk-move all ghost cells as a cohesive group before per-cell updates.
+        self.move_ghosts(gen);
+
         let w = self.width as i32;
         let h = self.height as i32;
 
@@ -78,6 +82,88 @@ impl Grid {
             }
         }
     }
+
+    /// Move all ghost cells one step in a shared direction.
+    ///
+    /// Collects ghost positions, checks that every destination is empty,
+    /// then performs the bulk swap. If any ghost cell is blocked, none move
+    /// — this keeps the shape perfectly intact.
+    fn move_ghosts(&mut self, gen: u8) {
+        use crate::elements::ghost::{shared_direction, MOVE_DIVISOR};
+
+        if gen % MOVE_DIVISOR != 0 {
+            return;
+        }
+
+        let w = self.width as i32;
+        let h = self.height as i32;
+
+        // Collect all ghost cell positions with their group ID (ra).
+        let mut ghost_positions: Vec<(i32, i32, u8)> = Vec::new();
+        for y in 0..h {
+            for x in 0..w {
+                let cell = self.get(x, y);
+                if cell.species == Species::Ghost {
+                    ghost_positions.push((x, y, cell.ra));
+                }
+            }
+        }
+
+        if ghost_positions.is_empty() {
+            return;
+        }
+
+        // Collect unique group IDs.
+        let mut groups: Vec<u8> = ghost_positions.iter().map(|&(_, _, g)| g).collect();
+        groups.sort_unstable();
+        groups.dedup();
+
+        // Process each group independently.
+        for group_id in groups {
+            // Each group gets its own direction by mixing group_id into the hash.
+            let (dx, dy) = shared_direction(gen, group_id);
+
+            let group_cells: Vec<(i32, i32)> = ghost_positions
+                .iter()
+                .filter(|&&(_, _, g)| g == group_id)
+                .map(|&(x, y, _)| (x, y))
+                .collect();
+
+            // Check that every destination is either empty or same-group ghost.
+            let can_move = group_cells.iter().all(|&(x, y)| {
+                let nx = x + dx;
+                let ny = y + dy;
+                if !self.in_bounds(nx, ny) {
+                    return false;
+                }
+                let dest = self.get(nx, ny);
+                dest.species == Species::Empty
+                    || (dest.species == Species::Ghost && dest.ra == group_id)
+            });
+
+            if !can_move {
+                continue;
+            }
+
+            // Sort so we process cells furthest in movement direction first.
+            let mut positions = group_cells;
+            positions.sort_by(|a, b| {
+                let score_a: i32 = a.0 * dx + a.1 * dy;
+                let score_b: i32 = b.0 * dx + b.1 * dy;
+                score_b.cmp(&score_a)
+            });
+
+            for &(x, y) in &positions {
+                let nx = x + dx;
+                let ny = y + dy;
+                let mut ghost_cell = self.get(x, y);
+                ghost_cell.clock = gen;
+                let dest_cell = self.get(nx, ny);
+                self.set(x, y, dest_cell);
+                self.set(nx, ny, ghost_cell);
+            }
+        }
+    }
 }
 
 /// WASM-exported wrapper around [`Grid`] for browser consumption.
@@ -89,6 +175,8 @@ pub struct Universe {
     grid: Grid,
     /// One byte per cell (species only), length = width × height.
     species_buffer: Vec<u8>,
+    /// Monotonically increasing counter for ghost group IDs (1–255, wraps).
+    next_ghost_group: u8,
 }
 
 impl fmt::Debug for Universe {
@@ -111,6 +199,7 @@ impl Universe {
         Self {
             grid,
             species_buffer,
+            next_ghost_group: 1,
         }
     }
 
@@ -133,6 +222,7 @@ impl Universe {
             2 => Species::Water,
             3 => Species::Wall,
             4 => Species::Fire,
+            5 => Species::Ghost,
             _ => return, // unknown species — ignore
         };
         let mut cell = Cell::new(s);
@@ -140,6 +230,27 @@ impl Universe {
         if s == Species::Fire {
             cell.rb = 120;
         }
+        self.grid.set(x as i32, y as i32, cell);
+    }
+
+    /// Allocate a new ghost group ID (1–255, wraps past 0).
+    pub fn alloc_ghost_group(&mut self) -> u8 {
+        let id = self.next_ghost_group;
+        self.next_ghost_group = self.next_ghost_group.wrapping_add(1);
+        // Skip 0 so group 0 is never used (reserve for "no group").
+        if self.next_ghost_group == 0 {
+            self.next_ghost_group = 1;
+        }
+        id
+    }
+
+    /// Place a ghost cell with a specific group ID stored in `ra`.
+    pub fn set_ghost(&mut self, x: usize, y: usize, group: u8) {
+        if x >= self.grid.width || y >= self.grid.height {
+            return;
+        }
+        let mut cell = Cell::new(Species::Ghost);
+        cell.ra = group;
         self.grid.set(x as i32, y as i32, cell);
     }
 
@@ -181,6 +292,7 @@ mod tests {
             Just(Species::Water),
             Just(Species::Wall),
             Just(Species::Fire),
+            Just(Species::Ghost),
         ]
     }
 
@@ -327,7 +439,7 @@ mod tests {
         #[test]
         fn prop_species_buffer_matches_grid_state(
             placements in proptest::collection::vec(
-                (0usize..256, 0usize..256, 0u8..5),
+                (0usize..256, 0usize..256, 0u8..6),
                 0..50,
             ),
             ticks in 1u32..10,

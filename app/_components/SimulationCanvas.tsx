@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { loadSimulation, type SimulationUniverse } from '@/app/_lib/wasm/loadSimulation';
 import { Renderer } from '@/app/_lib/renderer';
 import { InputHandler } from '@/app/_lib/input';
+import { ghostStamp, GHOST_SPECIES } from '@/app/_lib/stamps';
 
 const GRID_WIDTH = 256;
 const GRID_HEIGHT = 256;
@@ -16,6 +17,7 @@ const ELEMENTS = [
   { label: 'Water', species: 2, color: '#4a8fd4', shortcut: 'W' },
   { label: 'Wall', species: 3, color: '#8a8a8a', shortcut: 'X' },
   { label: 'Fire', species: 4, color: '#e85d2a', shortcut: 'F' },
+  { label: 'Ghost', species: 5, color: '#f0f0f7', shortcut: 'G' },
 ] as const;
 
 const BRUSH_SIZES = [0, 1, 2, 4, 6, 10] as const;
@@ -41,6 +43,7 @@ export default function SimulationCanvas() {
   useEffect(() => { pausedRef.current = paused; }, [paused]);
   useEffect(() => { inputRef.current?.setSpecies(selectedSpecies); }, [selectedSpecies]);
   useEffect(() => { inputRef.current?.setBrushRadius(brushRadius); }, [brushRadius]);
+  useEffect(() => { inputRef.current?.setStampMode(selectedSpecies === GHOST_SPECIES); }, [selectedSpecies]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -90,7 +93,16 @@ export default function SimulationCanvas() {
 
       const commands = input.flush();
       for (const cmd of commands) {
-        universe.set_cell(cmd.x, cmd.y, cmd.species);
+        if (cmd.species === GHOST_SPECIES) {
+          // Each ghost stamp gets its own group so they move independently.
+          const group = universe.alloc_ghost_group();
+          const stampCmds = ghostStamp(cmd.x, cmd.y, GHOST_SPECIES, GRID_WIDTH, GRID_HEIGHT);
+          for (const sc of stampCmds) {
+            universe.set_ghost(sc.x, sc.y, group);
+          }
+        } else {
+          universe.set_cell(cmd.x, cmd.y, cmd.species);
+        }
       }
 
       if (!pausedRef.current) {
@@ -198,13 +210,14 @@ export default function SimulationCanvas() {
             display: status === 'error' ? 'none' : 'block',
           }}
         />
-        {/* FPS badge */}
-        {status === 'running' && (
-          <div style={styles.fpsBadge}>
-            FPS:{fps}
-          </div>
-        )}
       </div>
+
+      {/* FPS badge — fixed to bottom-right of page */}
+      {status === 'running' && (
+        <div style={styles.fpsBadge}>
+          FPS:{fps}
+        </div>
+      )}
 
       {/* Sidebar */}
       {status === 'running' && (
@@ -384,9 +397,9 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: '320px',
   },
   fpsBadge: {
-    position: 'absolute',
-    bottom: '8px',
-    right: '8px',
+    position: 'fixed',
+    bottom: '12px',
+    right: '12px',
     fontFamily: "var(--font-pixel), monospace",
     fontSize: '11px',
     color: '#6b5f52',
@@ -394,6 +407,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '2px 6px',
     borderRadius: '3px',
     pointerEvents: 'none',
+    zIndex: 50,
   },
   sidebar: {
     display: 'flex',

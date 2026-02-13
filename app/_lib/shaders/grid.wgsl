@@ -29,6 +29,7 @@ fn fs(in: VertexOutput) -> @location(0) vec4<f32> {
         case 2u: { color = vec4<f32>(0.2, 0.4, 0.8, 1.0); }     // Water: blue
         case 3u: { color = vec4<f32>(0.5, 0.5, 0.5, 1.0); }     // Wall: gray
         case 4u: { color = vec4<f32>(0.9, 0.4, 0.1, 1.0); }     // Fire: orange
+        case 5u: { color = vec4<f32>(0.95, 0.95, 0.97, 1.0); }  // Ghost: white
         default: { color = vec4<f32>(1.0, 0.0, 1.0, 1.0); }     // Magenta error
     }
     return color;
