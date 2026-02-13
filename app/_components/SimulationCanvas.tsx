@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { loadSimulation, type SimulationUniverse } from '@/app/_lib/wasm/loadSimulation';
 import { Renderer } from '@/app/_lib/renderer';
 import { InputHandler } from '@/app/_lib/input';
@@ -32,27 +32,31 @@ export default function SimulationCanvas() {
     inputRef.current?.setBrushRadius(brushRadius);
   }, [brushRadius]);
 
-  const frameLoop = useCallback(() => {
-    const universe = universeRef.current;
-    const renderer = rendererRef.current;
-    const input = inputRef.current;
-    const memory = memoryRef.current;
-    if (!universe || !renderer || !input || !memory) return;
+  const frameLoopRef = useRef<(() => void) | null>(null);
 
-    const commands = input.flush();
-    for (const cmd of commands) {
-      universe.set_cell(cmd.x, cmd.y, cmd.species);
-    }
+  useEffect(() => {
+    frameLoopRef.current = () => {
+      const universe = universeRef.current;
+      const renderer = rendererRef.current;
+      const input = inputRef.current;
+      const memory = memoryRef.current;
+      if (!universe || !renderer || !input || !memory) return;
 
-    universe.tick();
+      const commands = input.flush();
+      for (const cmd of commands) {
+        universe.set_cell(cmd.x, cmd.y, cmd.species);
+      }
 
-    const ptr = universe.species_ptr();
-    const speciesData = new Uint8Array(memory.buffer, ptr, GRID_WIDTH * GRID_HEIGHT);
+      universe.tick();
 
-    renderer.render(speciesData);
+      const ptr = universe.species_ptr();
+      const speciesData = new Uint8Array(memory.buffer, ptr, GRID_WIDTH * GRID_HEIGHT);
 
-    rafRef.current = requestAnimationFrame(frameLoop);
-  }, []);
+      renderer.render(speciesData);
+
+      rafRef.current = requestAnimationFrame(() => frameLoopRef.current?.());
+    };
+  });
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -89,7 +93,7 @@ export default function SimulationCanvas() {
 
         setStatus('running');
 
-        rafRef.current = requestAnimationFrame(frameLoop);
+        rafRef.current = requestAnimationFrame(() => frameLoopRef.current?.());
       } catch (err) {
         if (cancelled) return;
         setErrorMsg(`Failed to initialize simulation: ${err instanceof Error ? err.message : String(err)}`);
@@ -111,7 +115,7 @@ export default function SimulationCanvas() {
       universeRef.current = null;
       memoryRef.current = null;
     };
-  }, [frameLoop]);
+  }, []);
 
   return (
     <div>
@@ -133,6 +137,7 @@ export default function SimulationCanvas() {
           imageRendering: 'pixelated',
           display: status === 'error' ? 'none' : 'block',
           cursor: 'crosshair',
+          touchAction: 'none',
         }}
       />
 

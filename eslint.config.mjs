@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Generated WASM bindings
+    "crates/simulation/pkg/**",
+    "public/simulation.js",
   ]),
 ]);
 

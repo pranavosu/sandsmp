@@ -26,12 +26,12 @@ export async function loadSimulation(): Promise<SimulationExports> {
   ) => Promise<Record<string, unknown>>;
 
   const mod = await importFn('/simulation.js');
-  const init = mod.default as (path: string) => Promise<unknown>;
-  await init('/simulation_bg.wasm');
+  const init = mod.default as (path: string) => Promise<{ memory: WebAssembly.Memory }>;
+  const instance = await init('/simulation_bg.wasm');
 
   wasmInstance = {
     Universe: mod.Universe as new (width: number, height: number) => SimulationUniverse,
-    memory: (mod as Record<string, unknown>).memory as WebAssembly.Memory,
+    memory: instance.memory,
   };
 
   return wasmInstance;
