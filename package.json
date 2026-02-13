@@ -11,6 +11,7 @@
     "lint": "eslint",
     "test:e2e": "npx playwright test",
     "test:e2e:headless": "npx playwright test --headed=false",
+    "postbuild": "@omega-next-adapter 2>/dev/null || echo 'Running Locally'",
     "verify": "cargo check && cargo test && npx tsc --noEmit && npx eslint && npx vitest --run"
   },
   "dependencies": {
