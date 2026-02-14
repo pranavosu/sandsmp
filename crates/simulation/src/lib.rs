@@ -56,31 +56,41 @@ impl Grid {
         self.generation = self.generation.wrapping_add(1);
         let gen = self.generation;
 
-        // Bulk-move all ghost cells as a cohesive group before per-cell updates.
-        self.move_ghosts(gen);
+        // Only do ghost work if ghosts exist on the grid.
+        if self.has_ghosts() {
+            self.move_ghosts(gen);
+        }
 
         let w = self.width as i32;
         let h = self.height as i32;
+        let scan_right = gen.is_multiple_of(2);
 
         for y in (0..h).rev() {
-            let x_range: Box<dyn Iterator<Item = i32>> = if gen.is_multiple_of(2) {
-                Box::new(0..w)
+            if scan_right {
+                for x in 0..w {
+                    self.update_cell_at(x, y, gen);
+                }
             } else {
-                Box::new((0..w).rev())
-            };
-            for x in x_range {
-                let cell = self.get(x, y);
-                if cell.species == Species::Empty || cell.species == Species::Wall {
-                    continue;
+                for x in (0..w).rev() {
+                    self.update_cell_at(x, y, gen);
                 }
-                if cell.clock == gen {
-                    continue;
-                }
-                let species = cell.species;
-                let mut sand_api = api::SandApi::new(self, x, y, gen);
-                elements::update_cell(species, &mut sand_api);
             }
         }
+    }
+
+    /// Process a single cell during the tick scan.
+    #[inline]
+    fn update_cell_at(&mut self, x: i32, y: i32, gen: u8) {
+        let cell = self.get(x, y);
+        if cell.species == Species::Empty || cell.species == Species::Wall {
+            return;
+        }
+        if cell.clock == gen {
+            return;
+        }
+        let species = cell.species;
+        let mut sand_api = api::SandApi::new(self, x, y, gen);
+        elements::update_cell(species, &mut sand_api);
     }
 
     /// Move all ghost cells one step in a shared direction.
@@ -99,6 +109,7 @@ impl Grid {
         let h = self.height as i32;
 
         // Collect all ghost cell positions with their group ID (ra).
+        // Use a pre-allocated Vec to avoid repeated small allocations.
         let mut ghost_positions: Vec<(i32, i32, u8)> = Vec::new();
         for y in 0..h {
             for x in 0..w {
@@ -165,6 +176,11 @@ impl Grid {
         }
     }
 
+    /// Returns true if any ghost cell exists in the grid.
+    fn has_ghosts(&self) -> bool {
+        self.cells.iter().any(|c| c.species == Species::Ghost)
+    }
+
     /// Update ghost eye cells so dark eyes shift toward the cursor
     /// (or the group's movement direction when no cursor is present).
     ///
@@ -178,22 +194,29 @@ impl Grid {
         let w = self.width as i32;
         let h = self.height as i32;
 
-        // Collect ghost cells grouped by ra (group ID).
-        let mut groups: std::collections::HashMap<u8, Vec<(i32, i32, u8)>> =
-            std::collections::HashMap::new();
+        // Collect ghost cells grouped by ra (group ID) using a fixed
+        // 256-slot array instead of HashMap to avoid allocation.
+        let mut group_data: [Vec<(i32, i32, u8)>; 256] =
+            std::array::from_fn(|_| Vec::new());
+        let mut has_any = false;
         for y in 0..h {
             for x in 0..w {
                 let cell = self.get(x, y);
                 if cell.species == Species::Ghost {
-                    groups
-                        .entry(cell.ra)
-                        .or_default()
-                        .push((x, y, cell.rb));
+                    group_data[cell.ra as usize].push((x, y, cell.rb));
+                    has_any = true;
                 }
             }
         }
 
-        for (_group_id, cells) in &groups {
+        if !has_any {
+            return;
+        }
+
+        for cells in &group_data {
+            if cells.is_empty() {
+                continue;
+            }
             // Compute group center.
             let (sum_x, sum_y, count) = cells.iter().fold((0i64, 0i64, 0i64), |(sx, sy, c), &(x, y, _)| {
                 (sx + x as i64, sy + y as i64, c + 1)
@@ -328,12 +351,14 @@ impl Universe {
         }
     }
 
-    /// Advance the simulation by one tick and sync the species buffer.
+    /// Advance the simulation by one tick and sync the render buffer.
     pub fn tick(&mut self) {
         self.grid.tick();
-        self.grid.update_ghost_eyes(self.cursor);
-        self.sync_species_buffer();
-        self.sync_cell_render_buffer();
+        // Only run expensive ghost eye tracking when ghosts exist.
+        if self.grid.has_ghosts() {
+            self.grid.update_ghost_eyes(self.cursor);
+        }
+        self.sync_render_buffers();
     }
 
     /// Set the cursor grid position for ghost eye tracking.
@@ -433,15 +458,12 @@ impl Universe {
 }
 
 impl Universe {
-    fn sync_species_buffer(&mut self) {
+    /// Sync both species buffer and cell render buffer in a single pass.
+    fn sync_render_buffers(&mut self) {
         for (i, cell) in self.grid.cells.iter().enumerate() {
-            self.species_buffer[i] = cell.species as u8;
-        }
-    }
-
-    fn sync_cell_render_buffer(&mut self) {
-        for (i, cell) in self.grid.cells.iter().enumerate() {
-            self.cell_render_buffer[i * 2] = cell.species as u8;
+            let sp = cell.species as u8;
+            self.species_buffer[i] = sp;
+            self.cell_render_buffer[i * 2] = sp;
             self.cell_render_buffer[i * 2 + 1] = cell.rb;
         }
     }

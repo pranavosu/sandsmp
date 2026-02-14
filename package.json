@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "npm run build:wasm && next dev",
-    "build:wasm": "wasm-pack build --target web crates/simulation && cp crates/simulation/pkg/simulation_bg.wasm public/simulation_bg.wasm && cp crates/simulation/pkg/simulation.js public/simulation.js",
+    "build:wasm": "wasm-pack build --release --target web crates/simulation && cp crates/simulation/pkg/simulation_bg.wasm public/simulation_bg.wasm && cp crates/simulation/pkg/simulation.js public/simulation.js",
     "build": "next build",
     "build:full": "npm run build:wasm && next build",
     "start": "next start",

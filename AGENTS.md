@@ -3,6 +3,9 @@ You MUST run typecheck after every task that updates TS files - `npx tsc --noEmi
 You MUST NOT use `wasm-pack` unless you need to verify the rust build. 
 
 You MUST always fix warnings after `cargo check`
+
+You MUST create a test or benchmark or repro to iterate on first when asked to solve a bug or performance issue unless it is impractical to do so.
+
 # Rust
 
 If you're working on rust code refer to ./docs/RUST.md

@@ -35,8 +35,9 @@ interface SimRefs {
   fpsFrames: React.RefObject<number>;
   fpsLastTime: React.RefObject<number>;
   cursorGridPos: React.RefObject<{ x: number; y: number } | null>;
-  setFps: (fps: number) => void;
+  fpsBadge: React.RefObject<HTMLDivElement | null>;
   onError: (msg: string) => void;
+  boundRunFrame?: FrameRequestCallback;
 }
 
 /** Module-level frame loop — no hooks, no self-reference issues. */
@@ -52,29 +53,33 @@ function runFrame(refs: SimRefs) {
     for (const cmd of commands) {
       if (cmd.species === GHOST_SPECIES) {
         const group = universe.alloc_ghost_group();
-      const stampCmds = ghostStamp(cmd.x, cmd.y, GHOST_SPECIES, GRID_WIDTH, GRID_HEIGHT);
-      for (const sc of stampCmds) {
-        universe.set_ghost(sc.x, sc.y, group, sc.rb);
+        const stampCmds = ghostStamp(cmd.x, cmd.y, GHOST_SPECIES, GRID_WIDTH, GRID_HEIGHT);
+        for (const sc of stampCmds) {
+          universe.set_ghost(sc.x, sc.y, group, sc.rb);
+        }
+      } else {
+        universe.set_cell(cmd.x, cmd.y, cmd.species);
       }
-    } else {
-      universe.set_cell(cmd.x, cmd.y, cmd.species);
     }
-  }
 
-  if (!refs.paused.current) {
-    // Send cursor position to WASM so ghosts look at the pointer.
-    const cursor = refs.cursorGridPos.current;
-    if (cursor) {
-      universe.set_cursor(cursor.x, cursor.y);
+    if (!refs.paused.current) {
+      const cursor = refs.cursorGridPos.current;
+      if (cursor) {
+        universe.set_cursor(cursor.x, cursor.y);
+      } else {
+        universe.clear_cursor();
+      }
+
+      universe.tick();
+
+      const ptr = universe.cell_render_ptr();
+      const cellRenderData = new Uint8Array(memory.buffer, ptr, GRID_WIDTH * GRID_HEIGHT * 2);
+      renderer.render(cellRenderData);
     } else {
-      universe.clear_cursor();
+      const ptr = universe.cell_render_ptr();
+      const cellRenderData = new Uint8Array(memory.buffer, ptr, GRID_WIDTH * GRID_HEIGHT * 2);
+      renderer.render(cellRenderData);
     }
-    universe.tick();
-  }
-
-  const ptr = universe.cell_render_ptr();
-  const cellRenderData = new Uint8Array(memory.buffer, ptr, GRID_WIDTH * GRID_HEIGHT * 2);
-  renderer.render(cellRenderData);
   } catch (e) {
     refs.universe.current = null;
     refs.onError(e instanceof Error ? e.message : String(e));
@@ -83,13 +88,22 @@ function runFrame(refs: SimRefs) {
 
   refs.fpsFrames.current!++;
   const now = performance.now();
-  if (now - refs.fpsLastTime.current! >= 1000) {
-    refs.setFps(refs.fpsFrames.current!);
+  const elapsed = now - refs.fpsLastTime.current!;
+  if (elapsed >= 1000) {
+    const badge = refs.fpsBadge.current;
+    if (badge) badge.textContent = `FPS:${refs.fpsFrames.current!}`;
     refs.fpsFrames.current = 0;
     refs.fpsLastTime.current = now;
   }
 
-  refs.raf.current = requestAnimationFrame(() => runFrame(refs));
+  refs.raf.current = requestAnimationFrame(refs.boundRunFrame!);
+}
+
+/** Bind once to avoid allocating a closure every frame. */
+function createBoundRunFrame(refs: SimRefs): FrameRequestCallback {
+  const bound = function _frame() { runFrame(refs); };
+  refs.boundRunFrame = bound;
+  return bound;
 }
 
 export default function SimulationCanvas() {
@@ -99,7 +113,7 @@ export default function SimulationCanvas() {
   const [selectedSpecies, setSelectedSpecies] = useState(1);
   const [brushRadius, setBrushRadius] = useState(2);
   const [paused, setPaused] = useState(false);
-  const [fps, setFps] = useState(0);
+  const fpsBadgeRef = useRef<HTMLDivElement>(null);
   const { theme, toggle: toggleTheme } = useTheme();
 
   const universeRef = useRef<SimulationUniverse | null>(null);
@@ -123,7 +137,7 @@ export default function SimulationCanvas() {
     fpsFrames,
     fpsLastTime,
     cursorGridPos: cursorGridPosRef,
-    setFps,
+    fpsBadge: fpsBadgeRef,
     onError: (msg: string) => {
       setErrorMsg(msg);
       setStatus('crashed');
@@ -149,7 +163,8 @@ export default function SimulationCanvas() {
       const newUniverse = new wasm.Universe(wid, hei);
       universeRef.current = newUniverse;
       memoryRef.current = wasm.memory;
-      rafRef.current = requestAnimationFrame(() => runFrame(simRefs.current));
+      const bound = createBoundRunFrame(simRefs.current);
+      rafRef.current = requestAnimationFrame(bound);
     });
   }, []);
 
@@ -228,7 +243,8 @@ export default function SimulationCanvas() {
         inputRef.current = input;
 
         setStatus('running');
-        rafRef.current = requestAnimationFrame(() => runFrame(simRefs.current));
+        const bound = createBoundRunFrame(simRefs.current);
+        rafRef.current = requestAnimationFrame(bound);
       } catch (err) {
         if (cancelled) return;
         setErrorMsg(`Init failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -297,8 +313,8 @@ export default function SimulationCanvas() {
 
       {/* FPS badge */}
       {status === 'running' && (
-        <div style={styles.fpsBadge}>
-          FPS:{fps}
+        <div ref={fpsBadgeRef} style={styles.fpsBadge} data-testid="fps-badge">
+          FPS:0
         </div>
       )}
 

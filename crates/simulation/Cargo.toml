@@ -15,6 +15,14 @@ wasm-bindgen = "0.2"
 [dev-dependencies]
 proptest = "1"
 
+[[bench]]
+name = "tick_perf"
+harness = false
+
+[dev-dependencies.criterion]
+version = "0.5"
+features = ["html_reports"]
+
 [lints.rust]
 missing_debug_implementations = "warn"
 redundant_imports = "warn"

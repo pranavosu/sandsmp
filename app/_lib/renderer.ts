@@ -167,7 +167,7 @@ export class Renderer {
     }
 
     const format = navigator.gpu.getPreferredCanvasFormat();
-    context.configure({ device, format, alphaMode: "premultiplied" });
+    context.configure({ device, format, alphaMode: "opaque" });
 
     // rg8uint texture: r = species, g = rb (lifetime for fire/smoke color)
     const gridTexture = device.createTexture({

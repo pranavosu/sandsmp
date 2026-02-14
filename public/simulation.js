@@ -99,7 +99,7 @@ export class Universe {
         return ret >>> 0;
     }
     /**
-     * Advance the simulation by one tick and sync the species buffer.
+     * Advance the simulation by one tick and sync the render buffer.
      */
     tick() {
         wasm.universe_tick(this.__wbg_ptr);
