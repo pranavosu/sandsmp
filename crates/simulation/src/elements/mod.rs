@@ -5,6 +5,8 @@ pub(crate) mod ghost;
 mod sand;
 mod smoke;
 mod water;
+#[cfg(test)]
+mod water_level_test;
 
 use crate::api::SandApi;
 use crate::cell::Species;
