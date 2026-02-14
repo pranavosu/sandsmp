@@ -11,6 +11,7 @@ use crate::api::SandApi;
 use crate::cell::{Cell, Species};
 
 /// Default lifetime when fire is placed by the player.
+#[expect(dead_code, reason = "reserved for future use when fire placement uses a standard lifetime")]
 pub const DEFAULT_FIRE_LIFETIME: u8 = 120;
 
 /// Smoke lifetime range: long enough for the turbulent phase to develop swirls.

@@ -6,31 +6,50 @@
 
 import type { DrawCommand } from './input';
 
-// 15×17 pixel ghost — rounded head, two eyes, wavy bottom
-// Designed to match a classic ghost silhouette at pixel scale.
+// 19×21 pixel ghost — tall smooth dome, wide body, short subtle tendrils.
+// '*' = body, 'Z' = eye zone (potential eye position), '.' = empty.
 const GHOST_BODY: readonly string[] = [
-  '....*******....',
-  '..***********..', 
-  '.*************.',
-  '***************',
-  '***************',
-  '***************',
-  '***..****..****',
-  '***..****..****',
-  '***************',
-  '***************',
-  '***************',
-  '***************',
-  '***************',
-  '***************',
-  '.**..***..**..*',
-  '..*...*...*....',
+  '......*******......',
+  '....***********....',
+  '...*************...',
+  '..***************..',
+  '.*****************.',
+  '.*****************.',
+  '*******************',
+  '*****ZZZZ*ZZZZ*****',
+  '*****ZZZZ*ZZZZ*****',
+  '*****ZZZZ*ZZZZ*****',
+  '*****ZZZZ*ZZZZ*****',
+  '*****ZZZZ*ZZZZ*****',
+  '*******************',
+  '*******************',
+  '*******************',
+  '*******************',
+  '*******************',
+  '*******************',
+  '******.*****.******',
+  '*****..*****..****.',
+  '****...****....*...',
 ];
 
+/** rb value for normal ghost body cells. */
+export const RB_BODY = 0;
+/** rb value for eye-zone cells (potential eye position, rendered as body). */
+export const RB_EYE_ZONE = 1;
+/** rb value for active eye cells (rendered dark). */
+export const RB_EYE = 2;
+
+/** Draw command extended with rb for ghost cells. */
+export interface GhostDrawCommand {
+  x: number;
+  y: number;
+  species: number;
+  rb: number;
+}
 
 /**
  * Generate draw commands to stamp a ghost centered at (cx, cy).
- * Body cells use `bodySpecies`, eye cells use species 0 (Empty).
+ * Body cells use `bodySpecies` with rb encoding their visual role.
  */
 export function ghostStamp(
   cx: number,
@@ -38,21 +57,26 @@ export function ghostStamp(
   bodySpecies: number,
   gridWidth: number,
   gridHeight: number,
-): DrawCommand[] {
+): GhostDrawCommand[] {
   const h = GHOST_BODY.length;
   const w = GHOST_BODY[0].length;
   const ox = cx - Math.floor(w / 2);
   const oy = cy - Math.floor(h / 2);
 
-  const cmds: DrawCommand[] = [];
+  const cmds: GhostDrawCommand[] = [];
   for (let row = 0; row < h; row++) {
     const line = GHOST_BODY[row];
     for (let col = 0; col < w; col++) {
-      if (line[col] === '.') continue;
+      const ch = line[col];
+      if (ch === '.') continue;
       const x = ox + col;
       const y = oy + row;
       if (x < 0 || x >= gridWidth || y < 0 || y >= gridHeight) continue;
-      cmds.push({ x, y, species: bodySpecies });
+
+      let rb = RB_BODY;
+      if (ch === 'Z') rb = RB_EYE_ZONE;
+
+      cmds.push({ x, y, species: bodySpecies, rb });
     }
   }
   return cmds;

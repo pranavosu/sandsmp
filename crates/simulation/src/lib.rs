@@ -164,6 +164,123 @@ impl Grid {
             }
         }
     }
+
+    /// Update ghost eye cells so dark eyes shift toward the cursor
+    /// (or the group's movement direction when no cursor is present).
+    ///
+    /// Each ghost group has two eye zones (left/right of center).
+    /// Within each zone, a 2×2 block of cells is marked as active eyes
+    /// (`RB_EYE`), positioned toward the look direction. The rest of
+    /// the zone renders as body color.
+    pub fn update_ghost_eyes(&mut self, cursor: Option<(i32, i32)>) {
+        use crate::elements::ghost::{RB_EYE, RB_EYE_ZONE};
+
+        let w = self.width as i32;
+        let h = self.height as i32;
+
+        // Collect ghost cells grouped by ra (group ID).
+        let mut groups: std::collections::HashMap<u8, Vec<(i32, i32, u8)>> =
+            std::collections::HashMap::new();
+        for y in 0..h {
+            for x in 0..w {
+                let cell = self.get(x, y);
+                if cell.species == Species::Ghost {
+                    groups
+                        .entry(cell.ra)
+                        .or_default()
+                        .push((x, y, cell.rb));
+                }
+            }
+        }
+
+        for (_group_id, cells) in &groups {
+            // Compute group center.
+            let (sum_x, sum_y, count) = cells.iter().fold((0i64, 0i64, 0i64), |(sx, sy, c), &(x, y, _)| {
+                (sx + x as i64, sy + y as i64, c + 1)
+            });
+            if count == 0 {
+                continue;
+            }
+            let cx = (sum_x / count) as i32;
+            let cy = (sum_y / count) as i32;
+
+            // Determine look direction: cursor if present, else center (neutral).
+            let (look_dx, look_dy) = if let Some((mx, my)) = cursor {
+                let dx = mx - cx;
+                let dy = my - cy;
+                (dx.signum(), dy.signum())
+            } else {
+                (0, 0)
+            };
+
+            // Collect eye-zone cells (rb == EYE_ZONE or EYE).
+            let eye_cells: Vec<(i32, i32)> = cells
+                .iter()
+                .filter(|&&(_, _, rb)| rb == RB_EYE_ZONE || rb == RB_EYE)
+                .map(|&(x, y, _)| (x, y))
+                .collect();
+
+            if eye_cells.is_empty() {
+                continue;
+            }
+
+            // Split into left and right eye clusters based on x relative to center.
+            let mut left_eye: Vec<(i32, i32)> = Vec::new();
+            let mut right_eye: Vec<(i32, i32)> = Vec::new();
+            for &(x, y) in &eye_cells {
+                if x <= cx {
+                    left_eye.push((x, y));
+                } else {
+                    right_eye.push((x, y));
+                }
+            }
+
+            // For each eye cluster, place a 2×2 dark block shifted toward look direction.
+            for eye_cluster in [&left_eye, &right_eye] {
+                if eye_cluster.is_empty() {
+                    continue;
+                }
+
+                // Find bounding box of this eye zone.
+                let min_x = eye_cluster.iter().map(|&(x, _)| x).min().unwrap();
+                let max_x = eye_cluster.iter().map(|&(x, _)| x).max().unwrap();
+                let min_y = eye_cluster.iter().map(|&(_, y)| y).min().unwrap();
+                let max_y = eye_cluster.iter().map(|&(_, y)| y).max().unwrap();
+
+                let zone_w = max_x - min_x + 1;
+                let zone_h = max_y - min_y + 1;
+
+                // Eye block is 2×3. Compute its top-left corner within the zone.
+                // Center of the zone, then offset by look direction, clamped to fit.
+                let center_x = min_x + (zone_w - 2) / 2;
+                let center_y = min_y + (zone_h - 3) / 2;
+
+                let eye_x = (center_x + look_dx).max(min_x).min(max_x - 1);
+                let eye_y = (center_y + look_dy).max(min_y).min(max_y - 2);
+
+                // Build set of 2×3 eye positions.
+                let eye_set: [(i32, i32); 6] = [
+                    (eye_x, eye_y),
+                    (eye_x + 1, eye_y),
+                    (eye_x, eye_y + 1),
+                    (eye_x + 1, eye_y + 1),
+                    (eye_x, eye_y + 2),
+                    (eye_x + 1, eye_y + 2),
+                ];
+
+                // Mark cells: eye positions get RB_EYE, rest get RB_EYE_ZONE.
+                for &(x, y) in eye_cluster.iter() {
+                    let mut cell = self.get(x, y);
+                    cell.rb = if eye_set.contains(&(x, y)) {
+                        RB_EYE
+                    } else {
+                        RB_EYE_ZONE
+                    };
+                    self.set(x, y, cell);
+                }
+            }
+        }
+    }
 }
 
 /// WASM-exported wrapper around [`Grid`] for browser consumption.
@@ -180,6 +297,8 @@ pub struct Universe {
     cell_render_buffer: Vec<u8>,
     /// Monotonically increasing counter for ghost group IDs (1–255, wraps).
     next_ghost_group: u8,
+    /// Cursor grid position for ghost eye tracking. `None` = no cursor visible.
+    cursor: Option<(i32, i32)>,
 }
 
 impl fmt::Debug for Universe {
@@ -205,14 +324,26 @@ impl Universe {
             species_buffer,
             cell_render_buffer,
             next_ghost_group: 1,
+            cursor: None,
         }
     }
 
     /// Advance the simulation by one tick and sync the species buffer.
     pub fn tick(&mut self) {
         self.grid.tick();
+        self.grid.update_ghost_eyes(self.cursor);
         self.sync_species_buffer();
         self.sync_cell_render_buffer();
+    }
+
+    /// Set the cursor grid position for ghost eye tracking.
+    pub fn set_cursor(&mut self, x: i32, y: i32) {
+        self.cursor = Some((x, y));
+    }
+
+    /// Clear the cursor (ghosts revert to movement-direction facing).
+    pub fn clear_cursor(&mut self) {
+        self.cursor = None;
     }
 
     /// Paint a cell at `(x, y)` with the given species value.
@@ -264,12 +395,14 @@ impl Universe {
     }
 
     /// Place a ghost cell with a specific group ID stored in `ra`.
-    pub fn set_ghost(&mut self, x: usize, y: usize, group: u8) {
+    /// The `rb` field encodes the cell's visual role (body/eye/pupil).
+    pub fn set_ghost(&mut self, x: usize, y: usize, group: u8, rb: u8) {
         if x >= self.grid.width || y >= self.grid.height {
             return;
         }
         let mut cell = Cell::new(Species::Ghost);
         cell.ra = group;
+        cell.rb = rb;
         self.grid.set(x as i32, y as i32, cell);
     }
 

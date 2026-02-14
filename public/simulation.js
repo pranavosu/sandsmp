@@ -37,6 +37,12 @@ export class Universe {
         return ret >>> 0;
     }
     /**
+     * Clear the cursor (ghosts revert to movement-direction facing).
+     */
+    clear_cursor() {
+        wasm.universe_clear_cursor(this.__wbg_ptr);
+    }
+    /**
      * @returns {number}
      */
     height() {
@@ -66,13 +72,23 @@ export class Universe {
         wasm.universe_set_cell(this.__wbg_ptr, x, y, species);
     }
     /**
+     * Set the cursor grid position for ghost eye tracking.
+     * @param {number} x
+     * @param {number} y
+     */
+    set_cursor(x, y) {
+        wasm.universe_set_cursor(this.__wbg_ptr, x, y);
+    }
+    /**
      * Place a ghost cell with a specific group ID stored in `ra`.
+     * The `rb` field encodes the cell's visual role (body/eye/pupil).
      * @param {number} x
      * @param {number} y
      * @param {number} group
+     * @param {number} rb
      */
-    set_ghost(x, y, group) {
-        wasm.universe_set_ghost(this.__wbg_ptr, x, y, group);
+    set_ghost(x, y, group, rb) {
+        wasm.universe_set_ghost(this.__wbg_ptr, x, y, group, rb);
     }
     /**
      * Pointer to the species-only byte buffer for GPU texture upload.

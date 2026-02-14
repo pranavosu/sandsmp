@@ -3,6 +3,22 @@
 //! Movement is handled as a bulk operation in `Grid::move_ghosts()`,
 //! not per-cell, so the entire shape translates uniformly.
 //! The per-cell `update_ghost` is a no-op.
+//!
+//! ## Eye system
+//!
+//! Ghost cells use `rb` to encode their visual role:
+//! - `0`: normal body
+//! - `1`: eye white (socket background)
+//! - `2`: pupil (dark dot)
+//!
+//! When a cursor position is set, `update_ghost_eyes` shifts pupils
+//! within each group's eye sockets to face the cursor. Without a
+//! cursor, ghosts face their movement direction (or down by default).
+
+/// `rb` value for eye-zone cells (potential eye positions, rendered as body).
+pub const RB_EYE_ZONE: u8 = 1;
+/// `rb` value for active eye cells (rendered dark).
+pub const RB_EYE: u8 = 2;
 
 /// Directions: up, down, left, right, and diagonals.
 pub const DIRS: [(i32, i32); 8] = [
@@ -20,7 +36,7 @@ pub const DIRS: [(i32, i32); 8] = [
 pub const DIRECTION_HOLD_TICKS: u8 = 10;
 
 /// Only move on every Nth tick so the ghost drifts lazily.
-pub const MOVE_DIVISOR: u8 = 6;
+pub const MOVE_DIVISOR: u8 = 8;
 
 /// Derive a direction from the generation counter and group ID.
 /// Different groups get different directions at the same tick.

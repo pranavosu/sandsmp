@@ -10,7 +10,9 @@ export interface SimulationUniverse {
   tick(): void;
   set_cell(x: number, y: number, species: number): void;
   alloc_ghost_group(): number;
-  set_ghost(x: number, y: number, group: number): void;
+  set_ghost(x: number, y: number, group: number, rb: number): void;
+  set_cursor(x: number, y: number): void;
+  clear_cursor(): void;
   species_ptr(): number;
   cell_render_ptr(): number;
   width(): number;

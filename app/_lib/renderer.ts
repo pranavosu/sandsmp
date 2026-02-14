@@ -72,9 +72,35 @@ fn fs(in: VertexOutput) -> @location(0) vec4<f32> {
             color = vec4<f32>(mix(dark, light, t_mode), 1.0);
         }
         case 5u: {
-            let dark  = vec3<f32>(0.95, 0.95, 0.97);
-            let light = vec3<f32>(0.565, 0.275, 1.0);
-            color = vec4<f32>(mix(dark, light, t_mode), 1.0);
+            // Ghost: body = spectral white/purple, rb=2 = dark eye
+            let dark_body  = vec3<f32>(0.95, 0.95, 0.97);
+            let light_interior = vec3<f32>(0.97, 0.97, 0.99);
+            let light_border = vec3<f32>(0.565, 0.275, 1.0);
+
+            // rb: 0 = body, 1 = eye zone (same as body), 2 = active eye (dark)
+            if (rb == 2u) {
+                let dark_eye  = vec3<f32>(0.08, 0.06, 0.15);
+                let light_eye = vec3<f32>(0.15, 0.08, 0.3);
+                color = vec4<f32>(mix(dark_eye, light_eye, t_mode), 1.0);
+            } else {
+                // In light mode, check if this cell borders a non-ghost cell.
+                var is_border = false;
+                if (t_mode > 0.5) {
+                    let n = textureLoad(grid_tex, coord + vec2<i32>(0, -1), 0).r;
+                    let s = textureLoad(grid_tex, coord + vec2<i32>(0,  1), 0).r;
+                    let w = textureLoad(grid_tex, coord + vec2<i32>(-1, 0), 0).r;
+                    let e = textureLoad(grid_tex, coord + vec2<i32>( 1, 0), 0).r;
+                    if (n != 5u || s != 5u || w != 5u || e != 5u) {
+                        is_border = true;
+                    }
+                }
+                if (is_border) {
+                    color = vec4<f32>(light_border, 1.0);
+                } else {
+                    let body_color = mix(dark_body, light_interior, t_mode);
+                    color = vec4<f32>(body_color, 1.0);
+                }
+            }
         }
         case 6u: {
             let t = clamp(f32(rb) / 100.0, 0.0, 1.0);

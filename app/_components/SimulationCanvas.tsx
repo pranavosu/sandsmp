@@ -34,6 +34,7 @@ interface SimRefs {
   raf: React.RefObject<number>;
   fpsFrames: React.RefObject<number>;
   fpsLastTime: React.RefObject<number>;
+  cursorGridPos: React.RefObject<{ x: number; y: number } | null>;
   setFps: (fps: number) => void;
   onError: (msg: string) => void;
 }
@@ -53,7 +54,7 @@ function runFrame(refs: SimRefs) {
         const group = universe.alloc_ghost_group();
       const stampCmds = ghostStamp(cmd.x, cmd.y, GHOST_SPECIES, GRID_WIDTH, GRID_HEIGHT);
       for (const sc of stampCmds) {
-        universe.set_ghost(sc.x, sc.y, group);
+        universe.set_ghost(sc.x, sc.y, group, sc.rb);
       }
     } else {
       universe.set_cell(cmd.x, cmd.y, cmd.species);
@@ -61,6 +62,13 @@ function runFrame(refs: SimRefs) {
   }
 
   if (!refs.paused.current) {
+    // Send cursor position to WASM so ghosts look at the pointer.
+    const cursor = refs.cursorGridPos.current;
+    if (cursor) {
+      universe.set_cursor(cursor.x, cursor.y);
+    } else {
+      universe.clear_cursor();
+    }
     universe.tick();
   }
 
@@ -102,6 +110,7 @@ export default function SimulationCanvas() {
   const pausedRef = useRef(false);
   const fpsFrames = useRef(0);
   const fpsLastTime = useRef(0);
+  const cursorGridPosRef = useRef<{ x: number; y: number } | null>(null);
 
   // Stable refs bundle for the module-level frame loop.
   const simRefs = useRef<SimRefs>({
@@ -113,6 +122,7 @@ export default function SimulationCanvas() {
     raf: rafRef,
     fpsFrames,
     fpsLastTime,
+    cursorGridPos: cursorGridPosRef,
     setFps,
     onError: (msg: string) => {
       setErrorMsg(msg);
@@ -160,6 +170,27 @@ export default function SimulationCanvas() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [handleReset, toggleTheme]);
+
+  // Track mouse position over canvas for ghost eye tracking.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const toGrid = (e: MouseEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const sx = (e.clientX - rect.left) / rect.width;
+      const sy = (e.clientY - rect.top) / rect.height;
+      const gx = Math.max(0, Math.min(GRID_WIDTH - 1, Math.floor(sx * GRID_WIDTH)));
+      const gy = Math.max(0, Math.min(GRID_HEIGHT - 1, Math.floor(sy * GRID_HEIGHT)));
+      cursorGridPosRef.current = { x: gx, y: gy };
+    };
+    const onLeave = () => { /* keep last cursor position so ghosts hold their gaze */ };
+    canvas.addEventListener('mousemove', toGrid);
+    canvas.addEventListener('mouseleave', onLeave);
+    return () => {
+      canvas.removeEventListener('mousemove', toGrid);
+      canvas.removeEventListener('mouseleave', onLeave);
+    };
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;

@@ -36,7 +36,14 @@ fn fs(in: VertexOutput) -> @location(0) vec4<f32> {
             let b = mix(0.02, 0.1, t * t * t);
             color = vec4<f32>(r, g, b, 1.0);
         }
-        case 5u: { color = vec4<f32>(0.95, 0.95, 0.97, 1.0); }  // Ghost: white
+        case 5u: {
+            // Ghost: body = spectral white, rb=2 = dark eye
+            if (rb == 2u) {
+                color = vec4<f32>(0.08, 0.06, 0.15, 1.0);
+            } else {
+                color = vec4<f32>(0.95, 0.95, 0.97, 1.0);
+            }
+        }
         case 6u: {
             // Smoke: subtle gray that fades toward background as rb decreases.
             let t = clamp(f32(rb) / 100.0, 0.0, 1.0);
