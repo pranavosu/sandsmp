@@ -74,9 +74,29 @@ fn fs(in: VertexOutput) -> @location(0) vec4<f32> {
             color = vec4<f32>(mix(dark_col, light_col, t_mode), 1.0);
         }
         case 2u: {
-            let dark  = vec3<f32>(0.2, 0.4, 0.8);
-            let light = vec3<f32>(0.21, 0.455, 0.72);
-            color = vec4<f32>(mix(dark, light, t_mode), 1.0);
+            // Position-based variation for stable water texture.
+            let fx = f32(coord.x);
+            let fy = f32(coord.y);
+            let drop = fract(sin(fx * 12.9898 + fy * 78.233) * 43758.5453);
+            let dark_base = vec3<f32>(0.2, 0.4, 0.8);
+            let dark_deep = vec3<f32>(0.12, 0.3, 0.72);
+            let dark_bright = vec3<f32>(0.28, 0.5, 0.88);
+            let light_base = vec3<f32>(0.21, 0.455, 0.72);
+            let light_deep = vec3<f32>(0.14, 0.36, 0.64);
+            let light_bright = vec3<f32>(0.30, 0.54, 0.80);
+            var dark_col: vec3<f32>;
+            var light_col: vec3<f32>;
+            if (drop < 0.33) {
+                dark_col = mix(dark_deep, dark_base, drop * 3.0);
+                light_col = mix(light_deep, light_base, drop * 3.0);
+            } else if (drop < 0.66) {
+                dark_col = mix(dark_base, dark_bright, (drop - 0.33) * 3.0);
+                light_col = mix(light_base, light_bright, (drop - 0.33) * 3.0);
+            } else {
+                dark_col = mix(dark_bright, dark_deep, (drop - 0.66) * 3.0);
+                light_col = mix(light_bright, light_deep, (drop - 0.66) * 3.0);
+            }
+            color = vec4<f32>(mix(dark_col, light_col, t_mode), 1.0);
         }
         case 3u: {
             let dark  = vec3<f32>(0.5, 0.5, 0.5);

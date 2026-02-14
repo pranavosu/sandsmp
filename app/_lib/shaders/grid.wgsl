@@ -42,7 +42,23 @@ fn fs(in: VertexOutput) -> @location(0) vec4<f32> {
             let brightness = 0.95 + 0.1 * fract(grain * 7.3);
             color = vec4<f32>(col * brightness, 1.0);
         }
-        case 2u: { color = vec4<f32>(0.2, 0.4, 0.8, 1.0); }     // Water: blue
+        case 2u: {
+            let fx = f32(coord.x);
+            let fy = f32(coord.y);
+            let drop = fract(sin(fx * 12.9898 + fy * 78.233) * 43758.5453);
+            let base   = vec3<f32>(0.2, 0.4, 0.8);
+            let deep   = vec3<f32>(0.12, 0.3, 0.72);
+            let bright = vec3<f32>(0.28, 0.5, 0.88);
+            var col: vec3<f32>;
+            if (drop < 0.33) {
+                col = mix(deep, base, drop * 3.0);
+            } else if (drop < 0.66) {
+                col = mix(base, bright, (drop - 0.33) * 3.0);
+            } else {
+                col = mix(bright, deep, (drop - 0.66) * 3.0);
+            }
+            color = vec4<f32>(col, 1.0);
+        }
         case 3u: { color = vec4<f32>(0.5, 0.5, 0.5, 1.0); }     // Wall: gray
         case 4u: {
             // Fire: dark red → red → orange → yellow based on remaining lifetime (rb).
