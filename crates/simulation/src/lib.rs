@@ -373,6 +373,8 @@ impl Universe {
 
     /// Paint a cell at `(x, y)` with the given species value.
     ///
+    /// Non-empty elements only fill empty cells (no overwriting existing
+    /// material). The eraser (species 0 / Empty) always overwrites.
     /// Out-of-bounds coordinates are silently ignored.
     pub fn set_cell(&mut self, x: usize, y: usize, species: u8) {
         if x >= self.grid.width || y >= self.grid.height {
@@ -388,6 +390,14 @@ impl Universe {
             6 => Species::Smoke,
             _ => return, // unknown species — ignore
         };
+
+        // Eraser (Empty) always overwrites; other elements only fill empty cells.
+        if s != Species::Empty
+            && self.grid.get(x as i32, y as i32).species != Species::Empty
+        {
+            return;
+        }
+
         let mut cell = Cell::new(s);
         // Fire starts with a lifetime counter so it doesn't vanish instantly.
         if s == Species::Fire {
@@ -421,8 +431,12 @@ impl Universe {
 
     /// Place a ghost cell with a specific group ID stored in `ra`.
     /// The `rb` field encodes the cell's visual role (body/eye/pupil).
+    /// Only fills empty cells — existing material is not overwritten.
     pub fn set_ghost(&mut self, x: usize, y: usize, group: u8, rb: u8) {
         if x >= self.grid.width || y >= self.grid.height {
+            return;
+        }
+        if self.grid.get(x as i32, y as i32).species != Species::Empty {
             return;
         }
         let mut cell = Cell::new(Species::Ghost);
@@ -677,5 +691,47 @@ mod tests {
 
             prop_assert_eq!(universe.grid.cells, cells_before);
         }
+    }
+
+    #[test]
+    fn set_cell_does_not_overwrite_existing_element() {
+        let mut universe = Universe::new(16, 16);
+        // Place sand at (5, 5).
+        universe.set_cell(5, 5, 1); // Sand
+        assert_eq!(universe.grid.get(5, 5).species, Species::Sand);
+
+        // Try to place water on top — should be ignored.
+        universe.set_cell(5, 5, 2); // Water
+        assert_eq!(universe.grid.get(5, 5).species, Species::Sand);
+    }
+
+    #[test]
+    fn set_cell_eraser_overwrites_existing_element() {
+        let mut universe = Universe::new(16, 16);
+        universe.set_cell(5, 5, 1); // Sand
+        assert_eq!(universe.grid.get(5, 5).species, Species::Sand);
+
+        // Eraser (species 0) should clear it.
+        universe.set_cell(5, 5, 0); // Empty
+        assert_eq!(universe.grid.get(5, 5).species, Species::Empty);
+    }
+
+    #[test]
+    fn set_cell_fills_empty_cells() {
+        let mut universe = Universe::new(16, 16);
+        // Empty cell should accept any element.
+        universe.set_cell(3, 3, 2); // Water
+        assert_eq!(universe.grid.get(3, 3).species, Species::Water);
+    }
+
+    #[test]
+    fn set_ghost_does_not_overwrite_existing_element() {
+        let mut universe = Universe::new(16, 16);
+        universe.set_cell(5, 5, 1); // Sand
+        assert_eq!(universe.grid.get(5, 5).species, Species::Sand);
+
+        // Ghost placement on occupied cell should be ignored.
+        universe.set_ghost(5, 5, 1, 0);
+        assert_eq!(universe.grid.get(5, 5).species, Species::Sand);
     }
 }

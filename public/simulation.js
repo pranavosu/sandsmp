@@ -63,6 +63,8 @@ export class Universe {
     /**
      * Paint a cell at `(x, y)` with the given species value.
      *
+     * Non-empty elements only fill empty cells (no overwriting existing
+     * material). The eraser (species 0 / Empty) always overwrites.
      * Out-of-bounds coordinates are silently ignored.
      * @param {number} x
      * @param {number} y
@@ -82,6 +84,7 @@ export class Universe {
     /**
      * Place a ghost cell with a specific group ID stored in `ra`.
      * The `rb` field encodes the cell's visual role (body/eye/pupil).
+     * Only fills empty cells — existing material is not overwritten.
      * @param {number} x
      * @param {number} y
      * @param {number} group
