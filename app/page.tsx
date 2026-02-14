@@ -8,7 +8,8 @@ export default function Home() {
         height: '100dvh',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'radial-gradient(ellipse at 50% 40%, #2a2520 0%, #1a1714 70%)',
+        background: 'var(--gradient-bg)',
+        transition: 'background 0.35s ease',
       }}
     >
       <SimulationLoader />

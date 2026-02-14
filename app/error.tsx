@@ -13,7 +13,7 @@ export default function Error({
         height: '100dvh',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'radial-gradient(ellipse at 50% 40%, #2a2520 0%, #1a1714 70%)',
+        background: 'var(--gradient-bg)',
         flexDirection: 'column',
         gap: '16px',
       }}
@@ -21,7 +21,7 @@ export default function Error({
       <div style={{ fontSize: '32px', opacity: 0.6 }}>💥</div>
       <div
         style={{
-          color: '#e85d2a',
+          color: 'var(--el-fire)',
           fontSize: '13px',
           fontFamily: 'var(--font-pixel), monospace',
         }}
@@ -32,12 +32,13 @@ export default function Error({
         onClick={() => reset()}
         style={{
           padding: '6px 18px',
-          border: '1px solid #3d352c',
+          border: '1px solid var(--border-warm)',
           borderRadius: '6px',
-          background: '#2a2520',
-          color: '#e8ddd0',
+          background: 'var(--bg-panel)',
+          color: 'var(--text-primary)',
           fontSize: '13px',
           cursor: 'pointer',
+          transition: 'background 0.35s, border-color 0.35s, color 0.35s',
         }}
       >
         Try again

@@ -5,6 +5,7 @@ import { loadSimulation, type SimulationUniverse } from '@/app/_lib/wasm/loadSim
 import { Renderer } from '@/app/_lib/renderer';
 import { InputHandler } from '@/app/_lib/input';
 import { ghostStamp, GHOST_SPECIES } from '@/app/_lib/stamps';
+import { useTheme } from '@/app/_lib/useTheme';
 
 const GRID_WIDTH = 256;
 const GRID_HEIGHT = 256;
@@ -12,13 +13,13 @@ const GRID_HEIGHT = 256;
 type Status = 'loading' | 'running' | 'error' | 'crashed';
 
 const ELEMENTS = [
-  { label: 'Empty', species: 0, color: '#3d352c', shortcut: 'E' },
-  { label: 'Sand', species: 1, color: '#dcc872', shortcut: 'S' },
-  { label: 'Water', species: 2, color: '#4a8fd4', shortcut: 'W' },
-  { label: 'Wall', species: 3, color: '#8a8a8a', shortcut: 'X' },
-  { label: 'Fire', species: 4, color: '#e85d2a', shortcut: 'F' },
-  { label: 'Ghost', species: 5, color: '#f0f0f7', shortcut: 'G' },
-  { label: 'Smoke', species: 6, color: '#7a7a7a', shortcut: 'K' },
+  { label: 'Eraser', species: 0, color: 'var(--el-empty)', rawColor: '#3d352c', shortcut: 'E' },
+  { label: 'Sand', species: 1, color: 'var(--el-sand)', rawColor: '#dcc872', shortcut: 'S' },
+  { label: 'Water', species: 2, color: 'var(--el-water)', rawColor: '#4a8fd4', shortcut: 'W' },
+  { label: 'Wall', species: 3, color: 'var(--el-wall)', rawColor: '#8a8a8a', shortcut: 'X' },
+  { label: 'Fire', species: 4, color: 'var(--el-fire)', rawColor: '#e85d2a', shortcut: 'F' },
+  { label: 'Ghost', species: 5, color: '#f0f0f7', rawColor: '#f0f0f7', shortcut: 'G' },
+  { label: 'Smoke', species: 6, color: '#7a7a7a', rawColor: '#7a7a7a', shortcut: 'K' },
 ] as const;
 
 const BRUSH_SIZES = [0, 1, 2, 4, 6, 10] as const;
@@ -91,6 +92,7 @@ export default function SimulationCanvas() {
   const [brushRadius, setBrushRadius] = useState(2);
   const [paused, setPaused] = useState(false);
   const [fps, setFps] = useState(0);
+  const { theme, toggle: toggleTheme } = useTheme();
 
   const universeRef = useRef<SimulationUniverse | null>(null);
   const rendererRef = useRef<Renderer | null>(null);
@@ -122,6 +124,7 @@ export default function SimulationCanvas() {
   useEffect(() => { inputRef.current?.setSpecies(selectedSpecies); }, [selectedSpecies]);
   useEffect(() => { inputRef.current?.setBrushRadius(brushRadius); }, [brushRadius]);
   useEffect(() => { inputRef.current?.setStampMode(selectedSpecies === GHOST_SPECIES); }, [selectedSpecies]);
+  useEffect(() => { rendererRef.current?.setTheme(theme === 'light' ? 1 : 0); }, [theme]);
 
   const handleReset = useCallback(() => {
     const universe = universeRef.current;
@@ -152,10 +155,11 @@ export default function SimulationCanvas() {
       if (key === 'R') { handleReset(); }
       if (e.key === '[') setBrushRadius(r => Math.max(0, r - 1));
       if (e.key === ']') setBrushRadius(r => Math.min(10, r + 1));
+      if (key === 'T') { toggleTheme(); }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [handleReset]);
+  }, [handleReset, toggleTheme]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -172,8 +176,6 @@ export default function SimulationCanvas() {
         const wasm = await loadSimulation();
         if (cancelled) return;
 
-        // Create the universe but do NOT store in refs yet — there's another
-        // await below and Strict Mode cleanup can fire between the two awaits.
         const universe = new wasm.Universe(GRID_WIDTH, GRID_HEIGHT);
 
         const renderer = await Renderer.create(canvas!, GRID_WIDTH, GRID_HEIGHT);
@@ -183,10 +185,13 @@ export default function SimulationCanvas() {
           return;
         }
 
-        // All async work done — safe to commit to refs in one synchronous block.
         universeRef.current = universe;
         memoryRef.current = wasm.memory;
         rendererRef.current = renderer;
+
+        // Apply stored theme immediately so first frame is correct
+        const storedTheme = localStorage.getItem('falling-sand-theme');
+        renderer.setTheme(storedTheme === 'light' ? 1 : 0);
 
         const input = new InputHandler(canvas!, GRID_WIDTH, GRID_HEIGHT);
         inputRef.current = input;
@@ -259,7 +264,7 @@ export default function SimulationCanvas() {
         />
       </div>
 
-      {/* FPS badge — fixed to bottom-right of page */}
+      {/* FPS badge */}
       {status === 'running' && (
         <div style={styles.fpsBadge}>
           FPS:{fps}
@@ -269,7 +274,7 @@ export default function SimulationCanvas() {
       {/* Sidebar */}
       {status === 'running' && (
         <div style={styles.sidebar}>
-          {/* Playback controls */}
+          {/* Theme toggle + Playback */}
           <div style={styles.section}>
             <div style={styles.sectionLabel}>Playback</div>
             <div style={styles.playbackRow}>
@@ -288,6 +293,36 @@ export default function SimulationCanvas() {
                 title="R"
               >
                 ↺
+              </button>
+              <div style={{ flex: 1 }} />
+              <button
+                onClick={toggleTheme}
+                style={styles.themeToggle}
+                aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+                title="T"
+              >
+                <span style={styles.themeToggleTrack}>
+                  <span
+                    style={{
+                      ...styles.themeToggleThumb,
+                      transform: theme === 'light' ? 'translateX(18px)' : 'translateX(0)',
+                    }}
+                  />
+                  <span style={{
+                    ...styles.themeToggleIcon,
+                    left: '4px',
+                    opacity: theme === 'dark' ? 1 : 0.3,
+                  }}>
+                    ☽
+                  </span>
+                  <span style={{
+                    ...styles.themeToggleIcon,
+                    right: '4px',
+                    opacity: theme === 'light' ? 1 : 0.3,
+                  }}>
+                    ☀
+                  </span>
+                </span>
               </button>
             </div>
           </div>
@@ -320,19 +355,19 @@ export default function SimulationCanvas() {
           <div style={styles.section}>
             <div style={styles.sectionLabel}>Elements</div>
             <div style={styles.elementsGrid}>
-              {ELEMENTS.map(({ label, species, color, shortcut }) => (
+              {ELEMENTS.map(({ label, species, color, rawColor, shortcut }) => (
                 <button
                   key={species}
                   onClick={() => setSelectedSpecies(species)}
                   aria-pressed={selectedSpecies === species}
                   style={{
                     ...styles.elementBtn,
-                    borderColor: selectedSpecies === species ? color : 'var(--border-warm)',
+                    borderColor: selectedSpecies === species ? rawColor : 'var(--border-warm)',
                     background: selectedSpecies === species
-                      ? `${color}18`
+                      ? `${rawColor}18`
                       : 'var(--bg-panel)',
                     boxShadow: selectedSpecies === species
-                      ? `0 0 12px ${color}30, inset 0 0 20px ${color}10`
+                      ? `0 0 12px ${rawColor}30, inset 0 0 20px ${rawColor}10`
                       : 'none',
                   }}
                 >
@@ -340,7 +375,7 @@ export default function SimulationCanvas() {
                     style={{
                       ...styles.elementSwatch,
                       background: color,
-                      boxShadow: `0 0 6px ${color}60`,
+                      boxShadow: `0 0 6px ${rawColor}60`,
                     }}
                   />
                   <span style={styles.elementLabel}>{label}</span>
@@ -377,10 +412,11 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'relative',
     borderRadius: '6px',
     overflow: 'hidden',
-    border: '2px solid #3d352c',
-    boxShadow: '0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(200,169,110,0.08)',
-    background: '#0f0d0b',
+    border: '2px solid var(--border-warm)',
+    boxShadow: 'var(--canvas-shadow)',
+    background: 'var(--bg-canvas-surround)',
     lineHeight: 0,
+    transition: 'border-color 0.35s, box-shadow 0.35s, background 0.35s',
   },
   canvas: {
     width: '560px',
@@ -396,27 +432,27 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    background: '#0f0d0b',
+    background: 'var(--bg-canvas-surround)',
     gap: '16px',
     zIndex: 10,
   },
   loadingText: {
     fontFamily: "var(--font-pixel), monospace",
     fontSize: '14px',
-    color: '#9c8e7c',
+    color: 'var(--text-secondary)',
     letterSpacing: '1px',
   },
   loadingBar: {
     width: '120px',
     height: '4px',
-    background: '#2a2520',
+    background: 'var(--bg-panel)',
     borderRadius: '2px',
     overflow: 'hidden',
   },
   loadingBarFill: {
     width: '40%',
     height: '100%',
-    background: '#c8a96e',
+    background: 'var(--accent-gold)',
     borderRadius: '2px',
     animation: 'pulse 1.2s ease-in-out infinite',
   },
@@ -427,7 +463,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    background: '#0f0d0b',
+    background: 'var(--bg-canvas-surround)',
     gap: '12px',
     padding: '32px',
     zIndex: 10,
@@ -437,7 +473,7 @@ const styles: Record<string, React.CSSProperties> = {
     opacity: 0.6,
   },
   errorText: {
-    color: '#e85d2a',
+    color: 'var(--el-fire)',
     fontSize: '13px',
     textAlign: 'center',
     lineHeight: 1.5,
@@ -446,12 +482,13 @@ const styles: Record<string, React.CSSProperties> = {
   reloadBtn: {
     marginTop: '8px',
     padding: '6px 18px',
-    border: '1px solid #3d352c',
+    border: '1px solid var(--border-warm)',
     borderRadius: '6px',
-    background: '#2a2520',
-    color: '#e8ddd0',
+    background: 'var(--bg-panel)',
+    color: 'var(--text-primary)',
     fontSize: '13px',
     cursor: 'pointer',
+    transition: 'background 0.15s, border-color 0.15s',
   },
   fpsBadge: {
     position: 'fixed',
@@ -459,12 +496,13 @@ const styles: Record<string, React.CSSProperties> = {
     right: '12px',
     fontFamily: "var(--font-pixel), monospace",
     fontSize: '11px',
-    color: '#6b5f52',
-    background: 'rgba(15,13,11,0.7)',
+    color: 'var(--text-muted)',
+    background: 'var(--fps-bg)',
     padding: '2px 6px',
     borderRadius: '3px',
     pointerEvents: 'none',
     zIndex: 50,
+    transition: 'color 0.35s, background 0.35s',
   },
   sidebar: {
     display: 'flex',
@@ -481,13 +519,15 @@ const styles: Record<string, React.CSSProperties> = {
   sectionLabel: {
     fontFamily: "var(--font-pixel), monospace",
     fontSize: '10px',
-    color: '#6b5f52',
+    color: 'var(--text-muted)',
     textTransform: 'uppercase',
     letterSpacing: '2px',
+    transition: 'color 0.35s',
   },
   playbackRow: {
     display: 'flex',
     gap: '6px',
+    alignItems: 'center',
   },
   controlBtn: {
     width: '36px',
@@ -495,13 +535,49 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    border: '1px solid #3d352c',
+    border: '1px solid var(--border-warm)',
     borderRadius: '6px',
-    background: '#2a2520',
-    color: '#e8ddd0',
+    background: 'var(--bg-panel)',
+    color: 'var(--text-primary)',
     fontSize: '14px',
     cursor: 'pointer',
-    transition: 'background 0.15s, border-color 0.15s',
+    transition: 'background 0.15s, border-color 0.15s, color 0.35s',
+  },
+  themeToggle: {
+    background: 'none',
+    border: 'none',
+    padding: 0,
+    cursor: 'pointer',
+    lineHeight: 0,
+  },
+  themeToggleTrack: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    position: 'relative' as const,
+    width: '38px',
+    height: '20px',
+    borderRadius: '10px',
+    background: 'var(--toggle-bg)',
+    border: '1px solid var(--border-warm)',
+    transition: 'background 0.35s, border-color 0.35s',
+  },
+  themeToggleThumb: {
+    position: 'absolute' as const,
+    top: '2px',
+    left: '2px',
+    width: '14px',
+    height: '14px',
+    borderRadius: '50%',
+    background: 'var(--accent-gold)',
+    transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+    zIndex: 2,
+  },
+  themeToggleIcon: {
+    position: 'absolute' as const,
+    fontSize: '10px',
+    transition: 'opacity 0.3s',
+    zIndex: 1,
+    lineHeight: '20px',
   },
   brushRow: {
     display: 'flex',
@@ -527,12 +603,12 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: '8px',
     padding: '7px 10px',
-    border: '1px solid #3d352c',
+    border: '1px solid var(--border-warm)',
     borderRadius: '6px',
     cursor: 'pointer',
     transition: 'all 0.15s',
     fontSize: '13px',
-    color: '#e8ddd0',
+    color: 'var(--text-primary)',
   },
   elementSwatch: {
     display: 'inline-block',
@@ -549,29 +625,33 @@ const styles: Record<string, React.CSSProperties> = {
   elementShortcut: {
     fontFamily: "var(--font-pixel), monospace",
     fontSize: '9px',
-    color: '#6b5f52',
+    color: 'var(--text-muted)',
     opacity: 0.7,
+    transition: 'color 0.35s',
   },
   infoSection: {
     marginTop: 'auto',
     paddingTop: '16px',
-    borderTop: '1px solid #2a2520',
+    borderTop: '1px solid var(--bg-panel)',
     display: 'flex',
     flexDirection: 'column',
     gap: '6px',
+    transition: 'border-color 0.35s',
   },
   infoText: {
     fontSize: '11px',
-    color: '#6b5f52',
+    color: 'var(--text-muted)',
     lineHeight: 1.4,
+    transition: 'color 0.35s',
   },
   kbd: {
     fontFamily: "var(--font-pixel), monospace",
     fontSize: '9px',
     padding: '1px 4px',
-    border: '1px solid #3d352c',
+    border: '1px solid var(--border-warm)',
     borderRadius: '3px',
-    background: '#2a2520',
-    color: '#9c8e7c',
+    background: 'var(--bg-panel)',
+    color: 'var(--text-secondary)',
+    transition: 'background 0.35s, border-color 0.35s, color 0.35s',
   },
 };

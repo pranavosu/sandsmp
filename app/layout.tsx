@@ -24,7 +24,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${silkscreen.variable} ${dmSans.variable}`}>
+    <html lang="en" data-theme="light" className={`${silkscreen.variable} ${dmSans.variable}`}>
       <body>{children}</body>
     </html>
   );
