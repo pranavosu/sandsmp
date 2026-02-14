@@ -399,6 +399,10 @@ impl Universe {
         }
 
         let mut cell = Cell::new(s);
+        // Sand uses rb for per-grain color variation (0–255).
+        if s == Species::Sand {
+            cell.rb = (x.wrapping_mul(137) ^ y.wrapping_mul(269)).wrapping_add(x.wrapping_add(y)) as u8;
+        }
         // Fire starts with a lifetime counter so it doesn't vanish instantly.
         if s == Species::Fire {
             // Randomize lifetime using position as cheap entropy.

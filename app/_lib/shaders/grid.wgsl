@@ -25,7 +25,23 @@ fn fs(in: VertexOutput) -> @location(0) vec4<f32> {
     var color: vec4<f32>;
     switch species {
         case 0u: { color = vec4<f32>(0.1, 0.1, 0.12, 1.0); }   // Empty: dark
-        case 1u: { color = vec4<f32>(0.86, 0.78, 0.45, 1.0); }  // Sand: tan
+        case 1u: {
+            // Per-grain variation. Base: earth yellow sRGB(225,169,95)
+            let grain = f32(rb) / 255.0;
+            let base  = vec3<f32>(0.882, 0.663, 0.373);
+            let warm  = vec3<f32>(0.78, 0.55, 0.28);
+            let pale  = vec3<f32>(0.95, 0.76, 0.47);
+            var col: vec3<f32>;
+            if (grain < 0.33) {
+                col = mix(warm, base, grain * 3.0);
+            } else if (grain < 0.66) {
+                col = mix(base, pale, (grain - 0.33) * 3.0);
+            } else {
+                col = mix(pale, warm, (grain - 0.66) * 3.0);
+            }
+            let brightness = 0.95 + 0.1 * fract(grain * 7.3);
+            color = vec4<f32>(col * brightness, 1.0);
+        }
         case 2u: { color = vec4<f32>(0.2, 0.4, 0.8, 1.0); }     // Water: blue
         case 3u: { color = vec4<f32>(0.5, 0.5, 0.5, 1.0); }     // Wall: gray
         case 4u: {

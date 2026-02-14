@@ -14,7 +14,7 @@ type Status = 'loading' | 'running' | 'error' | 'crashed';
 
 const ELEMENTS = [
   { label: 'Eraser', species: 0, color: 'var(--el-empty)', rawColor: '#3d352c', shortcut: 'E' },
-  { label: 'Sand', species: 1, color: 'var(--el-sand)', rawColor: '#dcc872', shortcut: 'S' },
+  { label: 'Sand', species: 1, color: 'var(--el-sand)', rawColor: '#e1a95f', shortcut: 'S' },
   { label: 'Water', species: 2, color: 'var(--el-water)', rawColor: '#4a8fd4', shortcut: 'W' },
   { label: 'Wall', species: 3, color: 'var(--el-wall)', rawColor: '#8a8a8a', shortcut: 'X' },
   { label: 'Fire', species: 4, color: 'var(--el-fire)', rawColor: '#e85d2a', shortcut: 'F' },

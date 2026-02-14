@@ -34,7 +34,7 @@ fn fs(in: VertexOutput) -> @location(0) vec4<f32> {
 
     // Dark palette                          Light palette
     // Empty:  #1a1a1f (dark void)           #e8e2d8 (warm parchment)
-    // Sand:   #dcc872 (golden)              #c4a830 (deeper ochre)
+    // Sand:   #e1a95f (earth yellow)         #cc934d (deeper earth)
     // Water:  #3366cc (deep blue)           #3574b8 (brighter blue)
     // Wall:   #808080 (gray)                #6e6e6e (darker gray)
     // Ghost:  #f0f0f7 (spectral white)      #b8b0c8 (lavender tint)
@@ -47,9 +47,31 @@ fn fs(in: VertexOutput) -> @location(0) vec4<f32> {
             color = vec4<f32>(mix(dark, light, t_mode), 1.0);
         }
         case 1u: {
-            let dark  = vec3<f32>(0.86, 0.78, 0.45);
-            let light = vec3<f32>(0.77, 0.66, 0.19);
-            color = vec4<f32>(mix(dark, light, t_mode), 1.0);
+            // Per-grain variation using rb as a 0–255 seed.
+            // Base: earth yellow sRGB(225,169,95) = (0.882, 0.663, 0.373)
+            let grain = f32(rb) / 255.0;
+            let dark_base = vec3<f32>(0.882, 0.663, 0.373);
+            let dark_warm = vec3<f32>(0.78, 0.55, 0.28);
+            let dark_pale = vec3<f32>(0.95, 0.76, 0.47);
+            let light_base = vec3<f32>(0.80, 0.58, 0.30);
+            let light_warm = vec3<f32>(0.70, 0.48, 0.22);
+            let light_pale = vec3<f32>(0.88, 0.68, 0.40);
+            var dark_col: vec3<f32>;
+            var light_col: vec3<f32>;
+            if (grain < 0.33) {
+                dark_col = mix(dark_warm, dark_base, grain * 3.0);
+                light_col = mix(light_warm, light_base, grain * 3.0);
+            } else if (grain < 0.66) {
+                dark_col = mix(dark_base, dark_pale, (grain - 0.33) * 3.0);
+                light_col = mix(light_base, light_pale, (grain - 0.33) * 3.0);
+            } else {
+                dark_col = mix(dark_pale, dark_warm, (grain - 0.66) * 3.0);
+                light_col = mix(light_pale, light_warm, (grain - 0.66) * 3.0);
+            }
+            let brightness = 0.95 + 0.1 * fract(grain * 7.3);
+            dark_col = dark_col * brightness;
+            light_col = light_col * brightness;
+            color = vec4<f32>(mix(dark_col, light_col, t_mode), 1.0);
         }
         case 2u: {
             let dark  = vec3<f32>(0.2, 0.4, 0.8);
